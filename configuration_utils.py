@@ -205,27 +205,27 @@ class PretrainedConfig(PushToHubMixin):
           BFloat16 scalars (only used by some TensorFlow models).
     """
     model_type: str = ""
-    is_composition: bool = False
+    #is_composition: bool = False
 
     def __init__(self, **kwargs):
         # Attributes with defaults
         self.return_dict = kwargs.pop("return_dict", True)
         self.output_hidden_states = kwargs.pop("output_hidden_states", False)
-        self.output_attentions = kwargs.pop("output_attentions", False)
+        #self.output_attentions = kwargs.pop("output_attentions", False)
         self.torchscript = kwargs.pop("torchscript", False)  # Only used by PyTorch models
         self.torch_dtype = kwargs.pop("torch_dtype", None)  # Only used by PyTorch models
         self.use_bfloat16 = kwargs.pop("use_bfloat16", False)
-        self.pruned_heads = kwargs.pop("pruned_heads", {})
+        #self.pruned_heads = kwargs.pop("pruned_heads", {})
         self.tie_word_embeddings = kwargs.pop(
             "tie_word_embeddings", True
         )  # Whether input and output word embeddings should be tied for all MLM, LM and Seq2Seq models.
-
+        """
         # Is decoder is used in encoder-decoder models to differentiate encoder from decoder
         self.is_encoder_decoder = kwargs.pop("is_encoder_decoder", False)
         self.is_decoder = kwargs.pop("is_decoder", False)
         self.add_cross_attention = kwargs.pop("add_cross_attention", False)
         self.tie_encoder_decoder = kwargs.pop("tie_encoder_decoder", False)
-
+        
         # Parameters for sequence generation
         self.max_length = kwargs.pop("max_length", 20)
         self.min_length = kwargs.pop("min_length", 0)
@@ -249,7 +249,7 @@ class PretrainedConfig(PushToHubMixin):
         self.forced_bos_token_id = kwargs.pop("forced_bos_token_id", None)
         self.forced_eos_token_id = kwargs.pop("forced_eos_token_id", None)
         self.remove_invalid_values = kwargs.pop("remove_invalid_values", False)
-
+        """
         # Fine-tuning task arguments
         self.architectures = kwargs.pop("architectures", None)
         self.finetuning_task = kwargs.pop("finetuning_task", None)
@@ -261,7 +261,7 @@ class PretrainedConfig(PushToHubMixin):
             # Keys are always strings in JSON so convert ids to int here.
         else:
             self.num_labels = kwargs.pop("num_labels", 2)
-
+        """
         # Tokenizer arguments TODO: eventually tokenizer and models should share the same config
         self.tokenizer_class = kwargs.pop("tokenizer_class", None)
         self.prefix = kwargs.pop("prefix", None)
@@ -271,10 +271,11 @@ class PretrainedConfig(PushToHubMixin):
         self.sep_token_id = kwargs.pop("sep_token_id", None)
 
         self.decoder_start_token_id = kwargs.pop("decoder_start_token_id", None)
-
+        """
         # task specific arguments
         self.task_specific_params = kwargs.pop("task_specific_params", None)
 
+        """
         # regression / multi-label classification
         self.problem_type = kwargs.pop("problem_type", None)
         allowed_problem_types = ("regression", "single_label_classification", "multi_label_classification")
@@ -283,7 +284,7 @@ class PretrainedConfig(PushToHubMixin):
                 f"The config parameter `problem_type` wasnot understood: received {self.problem_type}"
                 "but only 'regression', 'single_label_classification' and 'multi_label_classification' are valid."
             )
-
+        """
         # TPU arguments
         if kwargs.pop("xla_device", None) is not None:
             logger.warning(
