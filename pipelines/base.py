@@ -67,7 +67,7 @@ def infer_framework_load_model(
 
     Args:
         model (:obj:`str`, :class:`~transformers.PreTrainedModel` or :class:`~transformers.TFPreTrainedModel`):
-            The model to infer the framework from. If :obj:`str`, a checkpoint name. The model to infer the framewrok
+            The model to infer the framework from. If :obj:`str`, a checkpoint name. The model to infer the framework
             from.
         config (:class:`~transformers.AutoConfig`):
             The config associated with the model to help using the correct class
