@@ -26,7 +26,9 @@ from ..file_utils import is_tf_available, is_torch_available
 # from ..models.auto.feature_extraction_auto import FEATURE_EXTRACTOR_MAPPING, AutoFeatureExtractor
 from ..utils import logging
 from .base import (
-    Pipeline
+    Pipeline,
+    get_default_model,
+    infer_framework_load_model
 )
 from .image_classification import ImageClassificationPipeline
 
@@ -127,7 +129,9 @@ def pipeline(
     task: str,
     model: Optional = None,
     config: Optional[Union[str, PretrainedConfig]] = None,
-    framework: Optional[str] = None
+    framework: Optional[str] = None,
+    model_kwargs: Dict[str, Any] = {},
+    **kwargs
 ) -> Pipeline:
     # Retrieve the task
     targeted_task, task_options = check_task(task)
@@ -156,7 +160,6 @@ def pipeline(
         model_classes=model_classes,
         config=config,
         framework=framework,
-        revision=revision,
         task=task,
         **model_kwargs
     )
