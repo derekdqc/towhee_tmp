@@ -21,15 +21,15 @@ import json
 import os
 from typing import Any, Dict, Tuple, Union
 
-from . import __version__
-from .file_utils import CONFIG_NAME, PushToHubMixin, cached_path, hf_bucket_url, is_offline_mode, is_remote_url
-from .utils import logging
+# from . import __version__
+from file_utils import CONFIG_NAME, cached_path, is_offline_mode, is_remote_url
+from utils import logging
 
 
 logger = logging.get_logger(__name__)
 
 
-class PretrainedConfig(PushToHubMixin):
+class PretrainedConfig:
     r"""
     Base class for all configuration classes. Handles a few parameters common to all models' configurations as well as
     methods for loading/downloading/saving configurations.
@@ -380,19 +380,21 @@ class PretrainedConfig(PushToHubMixin):
         if from_pipeline is not None:
             user_agent["using_pipeline"] = from_pipeline
 
-        if is_offline_mode() and not local_files_only:
-            logger.info("Offline mode: forcing local_files_only=True")
-            local_files_only = True
+        # if is_offline_mode() and not local_files_only:
+        #     logger.info("Offline mode: forcing local_files_only=True")
+        #     local_files_only = True
 
         pretrained_model_name_or_path = str(pretrained_model_name_or_path)
         if os.path.isdir(pretrained_model_name_or_path):
             config_file = os.path.join(pretrained_model_name_or_path, CONFIG_NAME)
-        elif os.path.isfile(pretrained_model_name_or_path) or is_remote_url(pretrained_model_name_or_path):
-            config_file = pretrained_model_name_or_path
         else:
-            config_file = hf_bucket_url(
-                pretrained_model_name_or_path, filename=CONFIG_NAME, revision=revision, mirror=None
-            )
+            config_file = pretrained_model_name_or_path
+        # elif os.path.isfile(pretrained_model_name_or_path) or is_remote_url(pretrained_model_name_or_path):
+        #     config_file = pretrained_model_name_or_path
+        # else:
+        #     config_file = hf_bucket_url(
+        #         pretrained_model_name_or_path, filename=CONFIG_NAME, revision=revision, mirror=None
+        #     )
 
         try:
             # Load from URL or cache if already cached
