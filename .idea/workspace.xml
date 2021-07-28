@@ -1,118 +1,25 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <project version="4">
   <component name="ChangeListManager">
-    <list default="true" id="9d046371-9689-40ab-b4b2-8e39ab7b4f01" name="Default Changelist" comment="">
-      <change afterPath="$PROJECT_DIR$/activations.py" afterDir="false" />
-      <change afterPath="$PROJECT_DIR$/deepspeed.py" afterDir="false" />
-      <change afterPath="$PROJECT_DIR$/image_utils.py" afterDir="false" />
-      <change afterPath="$PROJECT_DIR$/integrations.py" afterDir="false" />
-      <change afterPath="$PROJECT_DIR$/modeling_outputs.py" afterDir="false" />
-      <change afterPath="$PROJECT_DIR$/testing_utils.py" afterDir="false" />
-      <change afterPath="$PROJECT_DIR$/tests/fixtures/coco.jpg" afterDir="false" />
-      <change afterPath="$PROJECT_DIR$/tests/fixtures/dummy-config.json" afterDir="false" />
-      <change afterPath="$PROJECT_DIR$/tests/fixtures/dummy_feature_extractor_config.json" afterDir="false" />
-      <change afterPath="$PROJECT_DIR$/tests/fixtures/empty.txt" afterDir="false" />
-      <change afterPath="$PROJECT_DIR$/tests/fixtures/input.txt" afterDir="false" />
-      <change afterPath="$PROJECT_DIR$/tests/fixtures/preprocessor_config.json" afterDir="false" />
-      <change afterPath="$PROJECT_DIR$/tests/fixtures/sample_text.txt" afterDir="false" />
-      <change afterPath="$PROJECT_DIR$/tests/fixtures/sample_text_no_unicode.txt" afterDir="false" />
-      <change afterPath="$PROJECT_DIR$/tests/fixtures/spiece.model" afterDir="false" />
-      <change afterPath="$PROJECT_DIR$/tests/fixtures/test_sentencepiece.model" afterDir="false" />
-      <change afterPath="$PROJECT_DIR$/tests/fixtures/test_sentencepiece_bpe.model" afterDir="false" />
-      <change afterPath="$PROJECT_DIR$/tests/fixtures/test_sentencepiece_no_bos.model" afterDir="false" />
-      <change afterPath="$PROJECT_DIR$/tests/fixtures/tests_samples/.gitignore" afterDir="false" />
-      <change afterPath="$PROJECT_DIR$/tests/fixtures/tests_samples/GermEval/dev.txt" afterDir="false" />
-      <change afterPath="$PROJECT_DIR$/tests/fixtures/tests_samples/GermEval/labels.txt" afterDir="false" />
-      <change afterPath="$PROJECT_DIR$/tests/fixtures/tests_samples/GermEval/train.txt" afterDir="false" />
-      <change afterPath="$PROJECT_DIR$/tests/fixtures/tests_samples/MRPC/dev.tsv" afterDir="false" />
-      <change afterPath="$PROJECT_DIR$/tests/fixtures/tests_samples/MRPC/train.tsv" afterDir="false" />
-      <change afterPath="$PROJECT_DIR$/tests/fixtures/tests_samples/SQUAD/sample.json" afterDir="false" />
-      <change afterPath="$PROJECT_DIR$/tests/fixtures/tests_samples/STS-B/dev.tsv" afterDir="false" />
-      <change afterPath="$PROJECT_DIR$/tests/fixtures/tests_samples/STS-B/train.tsv" afterDir="false" />
-      <change afterPath="$PROJECT_DIR$/tests/fixtures/tests_samples/conll/sample.json" afterDir="false" />
-      <change afterPath="$PROJECT_DIR$/tests/fixtures/tests_samples/swag/sample.json" afterDir="false" />
-      <change afterPath="$PROJECT_DIR$/tests/fixtures/tests_samples/wiki_text/wiki_00" afterDir="false" />
-      <change afterPath="$PROJECT_DIR$/tests/fixtures/tests_samples/wmt16/sample.json" afterDir="false" />
-      <change afterPath="$PROJECT_DIR$/tests/fixtures/tests_samples/wmt_en_ro/test.json" afterDir="false" />
-      <change afterPath="$PROJECT_DIR$/tests/fixtures/tests_samples/wmt_en_ro/train.json" afterDir="false" />
-      <change afterPath="$PROJECT_DIR$/tests/fixtures/tests_samples/wmt_en_ro/val.json" afterDir="false" />
-      <change afterPath="$PROJECT_DIR$/tests/fixtures/tests_samples/xsum/sample.json" afterDir="false" />
-      <change afterPath="$PROJECT_DIR$/tokenization_utils.py" afterDir="false" />
-      <change afterPath="$PROJECT_DIR$/tokenization_utils_base.py" afterDir="false" />
-      <change afterPath="$PROJECT_DIR$/utils/dummy_pt_objects.py" afterDir="false" />
-      <change afterPath="$PROJECT_DIR$/utils/dummy_tf_objects.py" afterDir="false" />
-      <change afterPath="$PROJECT_DIR$/utils/dummy_vision_objects.py" afterDir="false" />
-      <change afterPath="$PROJECT_DIR$/utils/imagenet_classes.py" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/__init__.py" beforeDir="false" afterPath="$PROJECT_DIR$/__init__.py" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/configuration_utils.py" beforeDir="false" afterPath="$PROJECT_DIR$/configuration_utils.py" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/feature_extraction_utils.py" beforeDir="false" afterPath="$PROJECT_DIR$/feature_extraction_utils.py" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/file_utils.py" beforeDir="false" afterPath="$PROJECT_DIR$/file_utils.py" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/main.py" beforeDir="false" afterPath="$PROJECT_DIR$/main.py" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/modeling_tf_utils.py" beforeDir="false" afterPath="$PROJECT_DIR$/modeling_tf_utils.py" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/modeling_utils.py" beforeDir="false" afterPath="$PROJECT_DIR$/modeling_utils.py" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/models/__init__.py" beforeDir="false" afterPath="$PROJECT_DIR$/models/__init__.py" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/models/auto/__init__.py" beforeDir="false" afterPath="$PROJECT_DIR$/models/auto/__init__.py" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/models/auto/auto_factory.py" beforeDir="false" afterPath="$PROJECT_DIR$/models/auto/auto_factory.py" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/models/auto/configuration_auto.py" beforeDir="false" afterPath="$PROJECT_DIR$/models/auto/configuration_auto.py" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/models/auto/feature_extraction_auto.py" beforeDir="false" afterPath="$PROJECT_DIR$/models/auto/feature_extraction_auto.py" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/models/auto/modeling_auto.py" beforeDir="false" afterPath="$PROJECT_DIR$/models/auto/modeling_auto.py" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/models/auto/modeling_flax_auto.py" beforeDir="false" />
-      <change beforePath="$PROJECT_DIR$/models/auto/modeling_tf_auto.py" beforeDir="false" />
-      <change beforePath="$PROJECT_DIR$/models/auto/tokenization_auto.py" beforeDir="false" />
-      <change beforePath="$PROJECT_DIR$/models/visual_bert/__init__.py" beforeDir="false" />
-      <change beforePath="$PROJECT_DIR$/models/visual_bert/configuration_visual_bert.py" beforeDir="false" />
-      <change beforePath="$PROJECT_DIR$/models/visual_bert/convert_visual_bert_original_pytorch_checkpoint_to_pytorch.py" beforeDir="false" />
-      <change beforePath="$PROJECT_DIR$/models/visual_bert/modeling_visual_bert.py" beforeDir="false" />
-      <change beforePath="$PROJECT_DIR$/models/vit/__init__.py" beforeDir="false" afterPath="$PROJECT_DIR$/models/vit/__init__.py" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/models/vit/configuration_vit.py" beforeDir="false" afterPath="$PROJECT_DIR$/models/vit/configuration_vit.py" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/models/vit/convert_vit_timm_to_pytorch.py" beforeDir="false" afterPath="$PROJECT_DIR$/models/vit/convert_vit_timm_to_pytorch.py" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/models/vit/modeling_vit.py" beforeDir="false" afterPath="$PROJECT_DIR$/models/vit/modeling_vit.py" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/pipelines/__init__.py" beforeDir="false" afterPath="$PROJECT_DIR$/pipelines/__init__.py" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/pipelines/base.py" beforeDir="false" afterPath="$PROJECT_DIR$/pipelines/base.py" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/pipelines/image_classification.py" beforeDir="false" afterPath="$PROJECT_DIR$/pipelines/image_classification.py" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/utils/__init__.py" beforeDir="false" afterPath="$PROJECT_DIR$/utils/__init__.py" afterDir="false" />
-    </list>
+    <list default="true" id="861129b1-1e0d-4d65-92ae-0ee8b85cd89d" name="Default Changelist" comment="" />
     <option name="SHOW_DIALOG" value="false" />
     <option name="HIGHLIGHT_CONFLICTS" value="true" />
     <option name="HIGHLIGHT_NON_ACTIVE_CHANGELIST" value="false" />
     <option name="LAST_RESOLUTION" value="IGNORE" />
   </component>
   <component name="Git.Settings">
-    <option name="RECENT_BRANCH_BY_REPOSITORY">
-      <map>
-        <entry key="$PROJECT_DIR$" value="master" />
-      </map>
-    </option>
     <option name="RECENT_GIT_ROOT_PATH" value="$PROJECT_DIR$" />
   </component>
-  <component name="ProjectId" id="1vhiRbI0IOngnPf0eG3JPK9zWxI" />
-  <component name="ProjectLevelVcsManager">
-    <ConfirmationsSetting value="2" id="Add" />
-  </component>
+  <component name="ProjectId" id="1vwB7x98BSRDW7ZMKNIuMQTgt13" />
   <component name="ProjectViewState">
     <option name="hideEmptyMiddlePackages" value="true" />
     <option name="showLibraryContents" value="true" />
   </component>
   <component name="PropertiesComponent">
-    <property name="ASKED_ADD_EXTERNAL_FILES" value="true" />
     <property name="RunOnceActivity.OpenProjectViewOnStart" value="true" />
     <property name="RunOnceActivity.ShowReadmeOnStart" value="true" />
     <property name="WebServerToolWindowFactoryState" value="false" />
     <property name="last_opened_file_path" value="$PROJECT_DIR$" />
-    <property name="settings.editor.selected.configurable" value="com.jetbrains.python.configuration.PyActiveSdkModuleConfigurable" />
-  </component>
-  <component name="RecentsManager">
-    <key name="CopyFile.RECENT_KEYS">
-      <recent name="$PROJECT_DIR$" />
-      <recent name="$PROJECT_DIR$/utils" />
-      <recent name="$PROJECT_DIR$/pipelines" />
-      <recent name="$PROJECT_DIR$/models/auto" />
-    </key>
-    <key name="MoveFile.RECENT_KEYS">
-      <recent name="$PROJECT_DIR$/tests" />
-      <recent name="$PROJECT_DIR$" />
-      <recent name="$PROJECT_DIR$/test" />
-    </key>
   </component>
   <component name="RunManager">
     <configuration name="main" type="PythonConfigurationType" factoryName="Python" temporary="true" nameIsGenerated="true">
@@ -146,36 +53,19 @@
   <component name="SpellCheckerSettings" RuntimeDictionaries="0" Folders="0" CustomDictionaries="0" DefaultDictionary="application-level" UseSingleDictionary="true" transferred="true" />
   <component name="TaskManager">
     <task active="true" id="Default" summary="Default task">
-      <changelist id="9d046371-9689-40ab-b4b2-8e39ab7b4f01" name="Default Changelist" comment="" />
-      <created>1627020714116</created>
+      <changelist id="861129b1-1e0d-4d65-92ae-0ee8b85cd89d" name="Default Changelist" comment="" />
+      <created>1627463106443</created>
       <option name="number" value="Default" />
       <option name="presentableId" value="Default" />
-      <updated>1627020714116</updated>
-      <workItem from="1627020715733" duration="5646000" />
-      <workItem from="1627366608335" duration="11980000" />
-      <workItem from="1627439475161" duration="9485000" />
+      <updated>1627463106443</updated>
+      <workItem from="1627463107635" duration="332000" />
     </task>
     <servers />
   </component>
   <component name="TypeScriptGeneratedFilesManager">
     <option name="version" value="3" />
   </component>
-  <component name="VcsManagerConfiguration">
-    <option name="ADD_EXTERNAL_FILES_SILENTLY" value="true" />
-    <option name="LAST_COMMIT_MESSAGE" value="" />
-  </component>
-  <component name="XDebuggerManager">
-    <breakpoint-manager>
-      <breakpoints>
-        <line-breakpoint enabled="true" suspend="THREAD" type="python-line">
-          <url>file://$PROJECT_DIR$/models/vit/__init__.py</url>
-          <line>17</line>
-          <option name="timeStamp" value="4" />
-        </line-breakpoint>
-      </breakpoints>
-    </breakpoint-manager>
-  </component>
   <component name="com.intellij.coverage.CoverageDataManagerImpl">
-    <SUITE FILE_PATH="coverage/towhee_tmp$main.coverage" NAME="main Coverage Results" MODIFIED="1627461517857" SOURCE_PROVIDER="com.intellij.coverage.DefaultCoverageFileProvider" RUNNER="coverage.py" COVERAGE_BY_TEST_ENABLED="true" COVERAGE_TRACING_ENABLED="false" WORKING_DIRECTORY="$PROJECT_DIR$" />
+    <SUITE FILE_PATH="coverage/towhee_tmp$main.coverage" NAME="main Coverage Results" MODIFIED="1627463428472" SOURCE_PROVIDER="com.intellij.coverage.DefaultCoverageFileProvider" RUNNER="coverage.py" COVERAGE_BY_TEST_ENABLED="true" COVERAGE_TRACING_ENABLED="false" WORKING_DIRECTORY="$PROJECT_DIR$" />
   </component>
 </project>
