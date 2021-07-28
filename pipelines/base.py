@@ -23,11 +23,9 @@ from abc import ABC, abstractmethod
 from contextlib import contextmanager
 from os.path import abspath, exists
 from typing import TYPE_CHECKING, Any, Dict, List, Optional, Tuple, Union
-
-from ..file_utils import is_tf_available, is_torch_available
-from ..models.auto.configuration_auto import AutoConfig
-from ..tokenization_utils import PreTrainedTokenizer, TruncationStrategy
-from ..utils import logging
+from file_utils import is_tf_available, is_torch_available
+from models.auto.configuration_auto import AutoConfig
+from utils import logging
 
 
 if is_tf_available():
@@ -38,11 +36,11 @@ if is_tf_available():
 if is_torch_available():
     import torch
 
-    from ..models.auto.modeling_auto import AutoModel
+    from models.auto.modeling_auto import AutoModel
 
 if TYPE_CHECKING:
-    from ..modeling_tf_utils import TFPreTrainedModel
-    from ..modeling_utils import PreTrainedModel
+    from modeling_tf_utils import TFPreTrainedModel
+    from modeling_utils import PreTrainedModel
 
 
 logger = logging.get_logger(__name__)
@@ -98,19 +96,19 @@ def infer_framework_load_model(
                 class_tuple = class_tuple + model_classes.get("pt", (AutoModel,))
             if look_tf:
                 class_tuple = class_tuple + model_classes.get("tf", (TFAutoModel,))
-        if config.architectures:
-            classes = []
-            for architecture in config.architectures:
-                transformers_module = importlib.import_module("transformers")
-                if look_pt:
-                    _class = getattr(transformers_module, architecture, None)
-                    if _class is not None:
-                        classes.append(_class)
-                if look_tf:
-                    _class = getattr(transformers_module, f"TF{architecture}", None)
-                    if _class is not None:
-                        classes.append(_class)
-            class_tuple = class_tuple + tuple(classes)
+        # if config.architectures:
+        #     classes = []
+        #     for architecture in config.architectures:
+        #         transformers_module = importlib.import_module("transformers")
+        #         if look_pt:
+        #             _class = getattr(transformers_module, architecture, None)
+        #             if _class is not None:
+        #                 classes.append(_class)
+        #         if look_tf:
+        #             _class = getattr(transformers_module, f"TF{architecture}", None)
+        #             if _class is not None:
+        #                 classes.append(_class)
+        #     class_tuple = class_tuple + tuple(classes)
 
         if len(class_tuple) == 0:
             raise ValueError(f"Pipeline cannot infer suitable model classes from {model}")
@@ -297,12 +295,8 @@ class Pipeline(_ScikitCompat):
     def __init__(
         self,
         model: Union["PreTrainedModel", "TFPreTrainedModel"],
-        tokenizer: Optional[PreTrainedTokenizer] = None,
-        feature_extractor: Optional[PreTrainedFeatureExtractor] = None,
-        modelcard: Optional[ModelCard] = None,
         framework: Optional[str] = None,
         task: str = "",
-        args_parser: ArgumentHandler = None,
         device: int = -1,
         binary_output: bool = False,
     ):
@@ -312,9 +306,6 @@ class Pipeline(_ScikitCompat):
 
         self.task = task
         self.model = model
-        self.tokenizer = tokenizer
-        self.feature_extractor = feature_extractor
-        self.modelcard = modelcard
         self.framework = framework
         self.device = device if framework == "tf" else torch.device("cpu" if device < 0 else f"cuda:{device}")
         self.binary_output = binary_output
@@ -427,23 +418,6 @@ class Pipeline(_ScikitCompat):
                 self.model.base_model_prefix,
                 f"The model '{self.model.__class__.__name__}' is not supported for {self.task}. Supported models are {supported_models}",
             )
-
-    def _parse_and_tokenize(
-        self, inputs, padding=True, add_special_tokens=True, truncation=TruncationStrategy.DO_NOT_TRUNCATE, **kwargs
-    ):
-        """
-        Parse arguments and tokenize
-        """
-        # Parse arguments
-        inputs = self.tokenizer(
-            inputs,
-            add_special_tokens=add_special_tokens,
-            return_tensors=self.framework,
-            padding=padding,
-            truncation=truncation,
-        )
-
-        return inputs
 
     def __call__(self, *args, **kwargs):
         inputs = self._parse_and_tokenize(*args, **kwargs)

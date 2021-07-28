@@ -3,10 +3,9 @@ from typing import TYPE_CHECKING, List, Optional, Union
 
 import requests
 
-from ..feature_extraction_utils import PreTrainedFeatureExtractor
-from ..file_utils import add_end_docstrings, is_torch_available, is_vision_available, requires_backends
-from ..utils import logging
-from .base import PIPELINE_INIT_ARGS, Pipeline
+from file_utils import is_torch_available, is_vision_available
+from utils import logging
+from .base import Pipeline
 
 
 if TYPE_CHECKING:
@@ -19,12 +18,12 @@ if is_vision_available():
 if is_torch_available():
     import torch
 
-    from ..models.auto.modeling_auto import MODEL_FOR_IMAGE_CLASSIFICATION_MAPPING
+    from models.auto.modeling_auto import MODEL_FOR_IMAGE_CLASSIFICATION_MAPPING
 
 logger = logging.get_logger(__name__)
 
 
-@add_end_docstrings(PIPELINE_INIT_ARGS)
+# @add_end_docstrings(PIPELINE_INIT_ARGS)
 class ImageClassificationPipeline(Pipeline):
     """
     Image classification pipeline using any :obj:`AutoModelForImageClassification`. This pipeline predicts the class of
@@ -40,11 +39,10 @@ class ImageClassificationPipeline(Pipeline):
     def __init__(
         self,
         model: Union["PreTrainedModel", "TFPreTrainedModel"],
-        feature_extractor: PreTrainedFeatureExtractor,
         framework: Optional[str] = None,
         **kwargs
     ):
-        super().__init__(model, feature_extractor=feature_extractor, framework=framework, **kwargs)
+        super().__init__(model, framework=framework, **kwargs)
 
         if self.framework == "tf":
             raise ValueError(f"The {self.__class__} is only available in PyTorch.")
@@ -52,8 +50,6 @@ class ImageClassificationPipeline(Pipeline):
         requires_backends(self, "vision")
 
         self.check_model_type(MODEL_FOR_IMAGE_CLASSIFICATION_MAPPING)
-
-        self.feature_extractor = feature_extractor
 
     @staticmethod
     def load_image(image: Union[str, "Image.Image"]):

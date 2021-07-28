@@ -19,12 +19,12 @@
 import warnings
 from typing import TYPE_CHECKING, Any, Dict, Optional, Tuple, Union
 
-from ..configuration_utils import PretrainedConfig
+from configuration_utils import PretrainedConfig
 # from ..feature_extraction_utils import PreTrainedFeatureExtractor
-from ..file_utils import is_tf_available, is_torch_available
+from file_utils import is_tf_available, is_torch_available
 # from ..models.auto.configuration_auto import AutoConfig
 # from ..models.auto.feature_extraction_auto import FEATURE_EXTRACTOR_MAPPING, AutoFeatureExtractor
-from ..utils import logging
+from utils import logging
 from .base import (
     Pipeline,
     get_default_model,
@@ -54,26 +54,12 @@ if is_tf_available():
 if is_torch_available():
     import torch
 
-    from ..models.auto.modeling_auto import (
-        MODEL_FOR_MASKED_LM_MAPPING,
-        MODEL_FOR_QUESTION_ANSWERING_MAPPING,
-        MODEL_FOR_SEQ_TO_SEQ_CAUSAL_LM_MAPPING,
-        MODEL_FOR_SEQUENCE_CLASSIFICATION_MAPPING,
-        MODEL_FOR_TABLE_QUESTION_ANSWERING_MAPPING,
-        MODEL_FOR_TOKEN_CLASSIFICATION_MAPPING,
-        AutoModel,
-        AutoModelForCausalLM,
-        AutoModelForImageClassification,
-        AutoModelForMaskedLM,
-        AutoModelForQuestionAnswering,
-        AutoModelForSeq2SeqLM,
-        AutoModelForSequenceClassification,
-        AutoModelForTableQuestionAnswering,
-        AutoModelForTokenClassification,
+    from models.auto.modeling_auto import (
+        AutoModelForImageClassification
     )
 if TYPE_CHECKING:
-    from ..modeling_tf_utils import TFPreTrainedModel
-    from ..modeling_utils import PreTrainedModel
+    from modeling_tf_utils import TFPreTrainedModel
+    from modeling_utils import PreTrainedModel
 
 logger = logging.get_logger(__name__)
 
@@ -141,13 +127,6 @@ def pipeline(
     if model is None:
         # At that point framework might still be undetermined
         model = get_default_model(targeted_task, framework, task_options)
-
-    # Config is the primordial information item.
-    # Instantiate config if needed
-    if isinstance(config, str):
-        config = AutoConfig.from_pretrained(config, revision=revision, _from_pipeline=task, **model_kwargs)
-    elif config is None and isinstance(model, str):
-        config = AutoConfig.from_pretrained(model, revision=revision, _from_pipeline=task, **model_kwargs)
 
     model_name = model if isinstance(model, str) else None
 
