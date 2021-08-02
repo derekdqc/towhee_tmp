@@ -130,10 +130,10 @@ def pipeline(
 
     # Config is the primordial information item.
     # Instantiate config if needed
-    if isinstance(config, str):
-        config = AutoConfig.from_pretrained(config, revision=revision, _from_pipeline=task, **model_kwargs)
-    elif config is None and isinstance(model, str):
-        config = AutoConfig.from_pretrained(model, revision=revision, _from_pipeline=task, **model_kwargs)
+    # if isinstance(config, str):
+    #     config = AutoConfig.from_pretrained(config, revision=revision, _from_pipeline=task, **model_kwargs)
+    # elif config is None and isinstance(model, str):
+    #     config = AutoConfig.from_pretrained(model, revision=revision, _from_pipeline=task, **model_kwargs)
 
     model_name = model if isinstance(model, str) else None
 

@@ -649,50 +649,50 @@ def get_from_cache(
 
     # Prevent parallel downloads of the same file with a lock.
     lock_path = cache_path + ".lock"
-    with FileLock(lock_path):
-
-        # If the download just completed while the lock was activated.
-        if os.path.exists(cache_path) and not force_download:
-            # Even if returning early like here, the lock will be released.
-            return cache_path
-
-        if resume_download:
-            incomplete_path = cache_path + ".incomplete"
-
-            @contextmanager
-            def _resumable_file_manager() -> "io.BufferedWriter":
-                with open(incomplete_path, "ab") as f:
-                    yield f
-
-            temp_file_manager = _resumable_file_manager
-            if os.path.exists(incomplete_path):
-                resume_size = os.stat(incomplete_path).st_size
-            else:
-                resume_size = 0
-        else:
-            temp_file_manager = partial(tempfile.NamedTemporaryFile, mode="wb", dir=cache_dir, delete=False)
-            resume_size = 0
-
-        # Download to temporary file, then copy to cache dir once finished.
-        # Otherwise you get corrupt cache entries if the download gets interrupted.
-        with temp_file_manager() as temp_file:
-            logger.info(f"{url} not found in cache or force_download set to True, downloading to {temp_file.name}")
-
-            http_get(url_to_download, temp_file, proxies=proxies, resume_size=resume_size, headers=headers)
-
-        logger.info(f"storing {url} in cache at {cache_path}")
-        os.replace(temp_file.name, cache_path)
-
-        # NamedTemporaryFile creates a file with hardwired 0600 perms (ignoring umask), so fixing it.
-        umask = os.umask(0o666)
-        os.umask(umask)
-        os.chmod(cache_path, 0o666 & ~umask)
-
-        logger.info(f"creating metadata file for {cache_path}")
-        meta = {"url": url, "etag": etag}
-        meta_path = cache_path + ".json"
-        with open(meta_path, "w") as meta_file:
-            json.dump(meta, meta_file)
+    # with FileLock(lock_path):
+    #
+    #     # If the download just completed while the lock was activated.
+    #     if os.path.exists(cache_path) and not force_download:
+    #         # Even if returning early like here, the lock will be released.
+    #         return cache_path
+    #
+    #     if resume_download:
+    #         incomplete_path = cache_path + ".incomplete"
+    #
+    #         @contextmanager
+    #         def _resumable_file_manager() -> "io.BufferedWriter":
+    #             with open(incomplete_path, "ab") as f:
+    #                 yield f
+    #
+    #         temp_file_manager = _resumable_file_manager
+    #         if os.path.exists(incomplete_path):
+    #             resume_size = os.stat(incomplete_path).st_size
+    #         else:
+    #             resume_size = 0
+    #     else:
+    #         temp_file_manager = partial(tempfile.NamedTemporaryFile, mode="wb", dir=cache_dir, delete=False)
+    #         resume_size = 0
+    #
+    #     # Download to temporary file, then copy to cache dir once finished.
+    #     # Otherwise you get corrupt cache entries if the download gets interrupted.
+    #     with temp_file_manager() as temp_file:
+    #         logger.info(f"{url} not found in cache or force_download set to True, downloading to {temp_file.name}")
+    #
+    #         http_get(url_to_download, temp_file, proxies=proxies, resume_size=resume_size, headers=headers)
+    #
+    #     logger.info(f"storing {url} in cache at {cache_path}")
+    #     os.replace(temp_file.name, cache_path)
+    #
+    #     # NamedTemporaryFile creates a file with hardwired 0600 perms (ignoring umask), so fixing it.
+    #     umask = os.umask(0o666)
+    #     os.umask(umask)
+    #     os.chmod(cache_path, 0o666 & ~umask)
+    #
+    #     logger.info(f"creating metadata file for {cache_path}")
+    #     meta = {"url": url, "etag": etag}
+    #     meta_path = cache_path + ".json"
+    #     with open(meta_path, "w") as meta_file:
+    #         json.dump(meta, meta_file)
 
     return cache_path
 
