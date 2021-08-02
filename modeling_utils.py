@@ -32,6 +32,10 @@ from deepspeed import deepspeed_config, is_deepspeed_zero3_enabled
 from file_utils import (
     ModelOutput,
     replace_return_docstrings,
+    TF2_WEIGHTS_NAME,
+    TF_WEIGHTS_NAME,
+    WEIGHTS_NAME,
+    hf_bucket_url,
 )
 from utils import logging
 

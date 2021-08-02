@@ -22,10 +22,10 @@ import os
 from typing import Any, Dict, Tuple, Union
 
 # from . import __version__
-from file_utils import CONFIG_NAME, cached_path, is_offline_mode, is_remote_url
+from file_utils import CONFIG_NAME, cached_path, hf_bucket_url, is_offline_mode, is_remote_url
 from utils import logging
 
-
+__version__ = "4.9.0.dev0"
 logger = logging.get_logger(__name__)
 
 
@@ -387,14 +387,12 @@ class PretrainedConfig:
         pretrained_model_name_or_path = str(pretrained_model_name_or_path)
         if os.path.isdir(pretrained_model_name_or_path):
             config_file = os.path.join(pretrained_model_name_or_path, CONFIG_NAME)
-        else:
+        elif os.path.isfile(pretrained_model_name_or_path) or is_remote_url(pretrained_model_name_or_path):
             config_file = pretrained_model_name_or_path
-        # elif os.path.isfile(pretrained_model_name_or_path) or is_remote_url(pretrained_model_name_or_path):
-        #     config_file = pretrained_model_name_or_path
-        # else:
-        #     config_file = hf_bucket_url(
-        #         pretrained_model_name_or_path, filename=CONFIG_NAME, revision=revision, mirror=None
-        #     )
+        else:
+            config_file = hf_bucket_url(
+                pretrained_model_name_or_path, filename=CONFIG_NAME, revision=revision, mirror=None
+            )
 
         try:
             # Load from URL or cache if already cached

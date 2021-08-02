@@ -20,10 +20,8 @@ import warnings
 from typing import TYPE_CHECKING, Any, Dict, Optional, Tuple, Union
 
 from configuration_utils import PretrainedConfig
-# from ..feature_extraction_utils import PreTrainedFeatureExtractor
 from file_utils import is_tf_available, is_torch_available
-# from ..models.auto.configuration_auto import AutoConfig
-# from ..models.auto.feature_extraction_auto import FEATURE_EXTRACTOR_MAPPING, AutoFeatureExtractor
+from models.auto.configuration_auto import AutoConfig
 from utils import logging
 from .base import (
     Pipeline,
@@ -116,6 +114,8 @@ def pipeline(
     model: Optional = None,
     config: Optional[Union[str, PretrainedConfig]] = None,
     framework: Optional[str] = None,
+    revision: Optional[str] = None,
+    use_auth_token: Optional[Union[str, bool]] = None,
     model_kwargs: Dict[str, Any] = {},
     **kwargs
 ) -> Pipeline:
@@ -128,7 +128,17 @@ def pipeline(
         # At that point framework might still be undetermined
         model = get_default_model(targeted_task, framework, task_options)
 
+    # Config is the primordial information item.
+    # Instantiate config if needed
+    if isinstance(config, str):
+        config = AutoConfig.from_pretrained(config, revision=revision, _from_pipeline=task, **model_kwargs)
+    elif config is None and isinstance(model, str):
+        config = AutoConfig.from_pretrained(model, revision=revision, _from_pipeline=task, **model_kwargs)
+
     model_name = model if isinstance(model, str) else None
+
+    # Retrieve use_auth_token and add it to model_kwargs to be used in .from_pretrained
+    model_kwargs["use_auth_token"] = model_kwargs.get("use_auth_token", use_auth_token)
 
     # Infer the framework from the model
     # Forced if framework already defined, inferred if it's None
@@ -143,4 +153,5 @@ def pipeline(
         **model_kwargs
     )
 
+    model_config = model.config
     return task_class(model=model, framework=framework, task=task, **kwargs)

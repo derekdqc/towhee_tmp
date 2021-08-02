@@ -1,0 +1,15 @@
+artifact_uri: file:///Users/derek/PycharmProjects/towhee_tmp/mlruns/0/110afd252ca74149acdc61c099057656/artifacts
+end_time: 1627869869139
+entry_point_name: ''
+experiment_id: '0'
+lifecycle_stage: active
+name: ''
+run_id: 110afd252ca74149acdc61c099057656
+run_uuid: 110afd252ca74149acdc61c099057656
+source_name: ''
+source_type: 4
+source_version: ''
+start_time: 1627869868764
+status: 3
+tags: []
+user_id: derek
