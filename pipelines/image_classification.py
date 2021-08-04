@@ -3,7 +3,7 @@ from typing import TYPE_CHECKING, List, Optional, Union
 
 import requests
 
-from file_utils import is_torch_available, is_vision_available
+from file_utils import is_torch_available, is_vision_available, requires_backends
 from utils import logging
 from .base import Pipeline
 
@@ -103,8 +103,8 @@ class ImageClassificationPipeline(Pipeline):
 
         images = [self.load_image(image) for image in images]
 
-        if top_k > self.model.config.num_labels:
-            top_k = self.model.config.num_labels
+        # if top_k > self.model.config.num_labels:
+        #     top_k = self.model.config.num_labels
 
         with torch.no_grad():
             inputs = self.feature_extractor(images=images, return_tensors="pt")

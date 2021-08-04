@@ -124,6 +124,7 @@ def pipeline(
     task_class = targeted_task["impl"]
 
     # Use default model/config/tokenizer for the task if no model is provided
+    # 用户未指定model时使用
     if model is None:
         # At that point framework might still be undetermined
         model = get_default_model(targeted_task, framework, task_options)
@@ -153,5 +154,4 @@ def pipeline(
         **model_kwargs
     )
 
-    model_config = model.config
     return task_class(model=model, framework=framework, task=task, **kwargs)

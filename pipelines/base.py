@@ -26,6 +26,8 @@ from typing import TYPE_CHECKING, Any, Dict, List, Optional, Tuple, Union
 from file_utils import is_tf_available, is_torch_available
 from models.auto.configuration_auto import AutoConfig
 from utils import logging
+# from models.linear.modeling_linear import LinearNNModel
+import torchvision
 
 
 if is_tf_available():
@@ -129,7 +131,10 @@ def infer_framework_load_model(
                 )
 
             try:
-                model = model_class.from_pretrained(model, **kwargs)
+                # 在这替换model?
+                # model = model_class.from_pretrained(model, **kwargs)
+                # model = LinearNNModel()
+                model = torchvision.models.mobilenet_v2()
                 # Stop loading on the first successful load.
                 break
             except (OSError, ValueError):
@@ -314,11 +319,6 @@ class Pipeline(_ScikitCompat):
         if self.framework == "pt" and self.device.type == "cuda":
             self.model = self.model.to(self.device)
 
-        # Update config with task specific parameters
-        task_specific_params = self.model.config.task_specific_params
-        if task_specific_params is not None and task in task_specific_params:
-            self.model.config.update(task_specific_params.get(task))
-
     def save_pretrained(self, save_directory: str):
         """
         Save the pipeline's model and tokenizer.
@@ -412,12 +412,12 @@ class Pipeline(_ScikitCompat):
                 else:
                     supported_models_names.append(model.__name__)
             supported_models = supported_models_names
-        if self.model.__class__.__name__ not in supported_models:
-            raise PipelineException(
-                self.task,
-                self.model.base_model_prefix,
-                f"The model '{self.model.__class__.__name__}' is not supported for {self.task}. Supported models are {supported_models}",
-            )
+        # if self.model.__class__.__name__ not in supported_models:
+        #     raise PipelineException(
+        #         self.task,
+        #         self.model.base_model_prefix,
+        #         f"The model '{self.model.__class__.__name__}' is not supported for {self.task}. Supported models are {supported_models}",
+        #     )
 
     def __call__(self, *args, **kwargs):
         inputs = self._parse_and_tokenize(*args, **kwargs)
@@ -448,3 +448,20 @@ class Pipeline(_ScikitCompat):
             return predictions
         else:
             return predictions.numpy()
+
+
+class PipelineException(Exception):
+    """
+    Raised by a :class:`~transformers.Pipeline` when handling __call__.
+
+    Args:
+        task (:obj:`str`): The task of the pipeline.
+        model (:obj:`str`): The model used by the pipeline.
+        reason (:obj:`str`): The error message to display.
+    """
+
+    def __init__(self, task: str, model: str, reason: str):
+        super().__init__(reason)
+
+        self.task = task
+        self.model = model

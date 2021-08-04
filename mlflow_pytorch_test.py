@@ -4,8 +4,9 @@ import shutil
 import numpy as np
 import torch
 import mlflow.pytorch
+import torchvision
 from mlflow.tracking import MlflowClient
-
+torch.nn.Conv2d
 
 class LinearNNModel(torch.nn.Module):
     def __init__(self):
