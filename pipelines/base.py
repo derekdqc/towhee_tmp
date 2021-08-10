@@ -17,12 +17,16 @@ import importlib
 import json
 import os
 import pickle
+import shutil
 import sys
 import warnings
 from abc import ABC, abstractmethod
 from contextlib import contextmanager
 from os.path import abspath, exists
 from typing import TYPE_CHECKING, Any, Dict, List, Optional, Tuple, Union
+
+import mlflow
+
 from file_utils import is_tf_available, is_torch_available
 from models.auto.configuration_auto import AutoConfig
 from utils import logging
@@ -134,8 +138,12 @@ def infer_framework_load_model(
                 # 在这替换model?
                 # model = model_class.from_pretrained(model, **kwargs)
                 # model = LinearNNModel()
-                model = torchvision.models.mobilenet_v2()
-                # Stop loading on the first successful load.
+                org_model = torchvision.models.mobilenet_v2()
+                mlflow_pyfunc_model_path = "mlflow_mobilenet_v2"
+                if os.path.exists(mlflow_pyfunc_model_path):
+                    shutil.rmtree(mlflow_pyfunc_model_path)
+                mlflow.pytorch.save_model(org_model, mlflow_pyfunc_model_path)
+                model = mlflow.pytorch.load_model("./mlflow_mobilenet_v2")
                 break
             except (OSError, ValueError):
                 continue
