@@ -112,9 +112,7 @@ def check_task(task: str) -> Tuple[Dict, Any]:
 def pipeline(
     task: str,
     model: Optional = None,
-    config: Optional[Union[str, PretrainedConfig]] = None,
     framework: Optional[str] = None,
-    revision: Optional[str] = None,
     use_auth_token: Optional[Union[str, bool]] = None,
     model_kwargs: Dict[str, Any] = {},
     **kwargs
@@ -129,13 +127,6 @@ def pipeline(
         # At that point framework might still be undetermined
         model = get_default_model(targeted_task, framework, task_options)
 
-    # Config is the primordial information item.
-    # Instantiate config if needed
-    # if isinstance(config, str):
-    #     config = AutoConfig.from_pretrained(config, revision=revision, _from_pipeline=task, **model_kwargs)
-    # elif config is None and isinstance(model, str):
-    #     config = AutoConfig.from_pretrained(model, revision=revision, _from_pipeline=task, **model_kwargs)
-
     model_name = model if isinstance(model, str) else None
 
     # Retrieve use_auth_token and add it to model_kwargs to be used in .from_pretrained
@@ -148,7 +139,6 @@ def pipeline(
     framework, model = infer_framework_load_model(
         model,
         model_classes=model_classes,
-        config=config,
         framework=framework,
         task=task,
         **model_kwargs

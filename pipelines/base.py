@@ -27,7 +27,7 @@ from typing import TYPE_CHECKING, Any, Dict, List, Optional, Tuple, Union
 
 import mlflow
 
-from file_utils import is_tf_available, is_torch_available
+from file_utils import is_tf_available, is_torch_available, is_remote_url
 from models.auto.configuration_auto import AutoConfig
 from utils import logging
 # from models.linear.modeling_linear import LinearNNModel
@@ -54,7 +54,6 @@ logger = logging.get_logger(__name__)
 
 def infer_framework_load_model(
     model,
-    config: AutoConfig,
     model_classes: Optional[Dict[str, Tuple[type]]] = None,
     task: Optional[str] = None,
     framework: Optional[str] = None,
@@ -134,10 +133,55 @@ def infer_framework_load_model(
                     "Trying to load the model with Tensorflow."
                 )
 
+            # from_tf = kwargs.pop("from_tf", False)
             try:
                 # 在这替换model?
                 # model = model_class.from_pretrained(model, **kwargs)
-                # model = LinearNNModel()
+                # Load model
+                if model is not None:
+                    model = str(model)
+                    if os.path.isdir(model):
+                        # if os.path.isfile(os.path.join(model, WEIGHTS_NAME)):
+                        if True:
+                            # Load from a PyTorch checkpoint
+                            # archive_file = os.path.join(model, WEIGHTS_NAME)
+                            pass
+                        else:
+                            raise EnvironmentError(
+                                f"Error no file named {[WEIGHTS_NAME, TF2_WEIGHTS_NAME, TF_WEIGHTS_NAME + '.index', FLAX_WEIGHTS_NAME]} found in "
+                                f"directory {model} or `from_tf` and `from_flax` set to False."
+                            )
+                    elif os.path.isfile(model) or is_remote_url(model):
+                        archive_file = model
+
+                #     try:
+                #         # Load from URL or cache if already cached
+                #         resolved_archive_file = cached_path(
+                #             archive_file,
+                #             cache_dir=cache_dir,
+                #             force_download=force_download,
+                #             proxies=proxies,
+                #             resume_download=resume_download,
+                #             local_files_only=local_files_only,
+                #             use_auth_token=use_auth_token,
+                #             user_agent=user_agent,
+                #         )
+                #     except EnvironmentError as err:
+                #         logger.error(err)
+                #         msg = (
+                #             f"Can't load weights for '{model}'. Make sure that:\n\n"
+                #             f"- '{model}' is a correct model identifier listed on 'https://huggingface.co/models'\n\n"
+                #             f"- or '{model}' is the correct path to a directory containing a file named one of {WEIGHTS_NAME}, {TF2_WEIGHTS_NAME}, {TF_WEIGHTS_NAME}.\n\n"
+                #         )
+                #         raise EnvironmentError(msg)
+                #
+                #     if resolved_archive_file == archive_file:
+                #         logger.info(f"loading weights file {archive_file}")
+                #     else:
+                #         logger.info(f"loading weights file {archive_file} from cache at {resolved_archive_file}")
+                # else:
+                #     resolved_archive_file = None
+
                 org_model = torchvision.models.mobilenet_v2()
                 mlflow_pyfunc_model_path = "mlflow_mobilenet_v2"
                 if os.path.exists(mlflow_pyfunc_model_path):
