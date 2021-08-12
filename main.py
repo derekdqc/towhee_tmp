@@ -125,8 +125,9 @@ class ImageClassificationPipelineTests(unittest.TestCase):
 
 
 if __name__ == '__main__':
-    classifier = ImageClassificationPipelineTests()
-    classifier.test_small_model_from_factory()
+    unittest.main(verbosity=1)
+    # classifier = ImageClassificationPipelineTests()
+    # classifier.test_small_model_from_factory()
 
     # from transformers import BertModel, AutoModel
     #
