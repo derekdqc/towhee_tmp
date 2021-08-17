@@ -1,46 +1,18 @@
-import time
 import copy
-import pandas as pd
-import numpy as np
 import os
+import time
+
 import torch
 import torchvision
 from torch import nn, optim
 from torch.optim import lr_scheduler
-
+from torchvision import datasets, transforms
+from torch.utils.data import Dataset
 from PIL import Image
-from pandas import Series, DataFrame
-from torch.utils.data import Dataset, DataLoader
-from torchvision import transforms, utils
 
-df = pd.read_csv('./kaggle_dataset/labels.csv')
-breed = df['breed']
-breed_np = Series.to_numpy(breed)
-
-# 看一下一共多少不同种类
-breed_set = set(breed_np)
-# 构建一个编号与名称对应的字典，以后输出的数字要变成名字的时候用：
-breed_120_list = list(breed_set)
-dic = {}
-for i in range(120):
-    dic[breed_120_list[i]] = i
-
-file = Series.to_numpy(df["id"])
-
-file = [i + ".jpg" for i in file]
-file = [os.path.join("./kaggle_dataset/train", i) for i in file]
-file_train = file[:8000]
-file_val = file[8000:]
-
-breed = Series.to_numpy(df["breed"])
-label = []
-for i in range(10222):
-    label.append(dic[breed[i]])
-label = np.array(label)
-label_train = label[:8000]
-label_val = label[8000:]
-
-
+data_dir = '/Users/derek/PycharmProjects/towhee_tmp/datasets'
+# Data augmentation and normalization for training
+# Just normalization for validation
 data_transforms = {
     'train': transforms.Compose([
         transforms.RandomResizedCrop(224),
@@ -57,44 +29,49 @@ data_transforms = {
 }
 
 
-def train_loader(path):
-    img_pil = Image.open(path)
-    img_tensor = data_transforms['train'](img_pil)
-    return img_tensor
-
-
-def val_loader(path):
-    img_pil = Image.open(path)
-    img_tensor = data_transforms['val'](img_pil)
-    return img_tensor
-
-
-class MyDataset(Dataset):
-    def __init__(self, images, labels, loader):
-        # 定义好 image 的路径
-        self.images = images
-        self.labels = labels
-        self.loader = loader
-
-    def __getitem__(self, index):
-        fn = self.images[index]
-        img = self.loader(fn)
-        label = self.labels[index]
-        return img, label
+class MyDataset(torch.utils.data.Dataset):
+    def __init__(self, data_dir, index_file):
+        super().__init__()
+        # self.transform = transform
+        self.transform = transforms.Compose(
+            [transforms.ToTensor()])  # you can add to the list all the transformations you need.
+        self.data_dir = data_dir
+        self.index_file = index_file
+        # self.data_indices = datasets.ImageFolder(os.path.join(data_dir, transform))
+        with open(index_file) as r_index_file:
+            self.data_indices = r_index_file.readlines()
 
     def __len__(self):
-        return len(self.images)
+        return len(self.data_indices)
+
+    def __getitem__(self, index):
+        img_path, label = self.data_indices[index].strip().split(':')
+        img = Image.open(os.path.join(self.data_dir, img_path))
+        # if self.transform:
+        #     img = self.transform
+
+        return self.transform(img), label
 
 
-train_data = MyDataset(file_train, label_train, train_loader)
-val_data = MyDataset(file_val, label_val, val_loader)
-train_loader = DataLoader(train_data, batch_size=4, shuffle=True)
-val_loader = DataLoader(val_data, batch_size=4, shuffle=True)
+train_index_file = '/Users/derek/PycharmProjects/towhee_tmp/datasets/train/indices.txt'
+val_index_file = '/Users/derek/PycharmProjects/towhee_tmp/datasets/val/indices.txt'
+train_dataset = MyDataset(data_dir, train_index_file)
+val_dataset = MyDataset(data_dir, val_index_file)
+train_dataloader = torch.utils.data.DataLoader(train_dataset, batch_size=4, shuffle=True)
+val_dataloader = torch.utils.data.DataLoader(val_dataset, batch_size=4, shuffle=True)
+dataloaders = {'train': train_dataloader,
+               'val': val_dataloader}
 
-dataloaders = {'train': train_loader,
-               'val': val_loader}
-dataset_sizes = {'train': len(train_data),
-                 'val': len(val_data)}
+dataset_sizes = {'train': len(train_dataset),
+                 'val': len(val_dataset)}
+
+image_datasets = {x: datasets.ImageFolder(os.path.join(data_dir, x),
+                                         data_transforms[x]) for x in ['train', 'val']}
+
+# dataloaders = {x: torch.utils.data.DataLoader(image_datasets[x], batch_size=4,
+#                                              shuffle=True) for x in ['train', 'val']}
+# dataset_sizes = {x: len(image_datasets[x]) for x in ['train', 'val']}
+# class_names = image_datasets['train'].classes
 
 device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
 
@@ -114,7 +91,7 @@ def train_model(model, criterion, optimizer, scheduler, num_epochs=25):
             if phase == 'train':
                 model.train()  # Set model to training mode
             else:
-                model.eval()  # Set model to evaluate mode
+                model.eval()   # Set model to evaluate mode
 
             running_loss = 0.0
             running_corrects = 0
@@ -172,7 +149,7 @@ model_ft = torchvision.models.resnet18(pretrained=False)
 num_ftrs = model_ft.fc.in_features
 # Here the size of each output sample is set to 2.
 # Alternatively, it can be generalized to nn.Linear(num_ftrs, len(class_names)).
-model_ft.fc = nn.Linear(num_ftrs, 120)
+model_ft.fc = nn.Linear(num_ftrs, 2)
 
 model_ft = model_ft.to(device)
 
