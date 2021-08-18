@@ -36,10 +36,10 @@ breed = Series.to_numpy(df["breed"])
 label = []
 for i in range(10222):
     label.append(dic[breed[i]])
-label = np.array(label)
+# label = np.array(label)
 label_train = label[:8000]
 label_val = label[8000:]
-
+print('label_train: ', label_train)
 
 data_transforms = {
     'train': transforms.Compose([
