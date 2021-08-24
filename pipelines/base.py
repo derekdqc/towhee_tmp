@@ -101,19 +101,6 @@ def infer_framework_load_model(
                 class_tuple = class_tuple + model_classes.get("pt", (AutoModel,))
             if look_tf:
                 class_tuple = class_tuple + model_classes.get("tf", (TFAutoModel,))
-        # if config.architectures:
-        #     classes = []
-        #     for architecture in config.architectures:
-        #         transformers_module = importlib.import_module("transformers")
-        #         if look_pt:
-        #             _class = getattr(transformers_module, architecture, None)
-        #             if _class is not None:
-        #                 classes.append(_class)
-        #         if look_tf:
-        #             _class = getattr(transformers_module, f"TF{architecture}", None)
-        #             if _class is not None:
-        #                 classes.append(_class)
-        #     class_tuple = class_tuple + tuple(classes)
 
         if len(class_tuple) == 0:
             raise ValueError(f"Pipeline cannot infer suitable model classes from {model}")
@@ -182,12 +169,15 @@ def infer_framework_load_model(
                 # else:
                 #     resolved_archive_file = None
 
-                org_model = torchvision.models.mobilenet_v2()
-                mlflow_pyfunc_model_path = "mlflow_mobilenet_v2"
+                if model == 'resnet':
+                    org_model = torchvision.models.resnet50()
+                else:
+                    pass
+                mlflow_pyfunc_model_path = 'mlflow_' + model
                 if os.path.exists(mlflow_pyfunc_model_path):
                     shutil.rmtree(mlflow_pyfunc_model_path)
                 mlflow.pytorch.save_model(org_model, mlflow_pyfunc_model_path)
-                model = mlflow.pytorch.load_model("./mlflow_mobilenet_v2")
+                model = mlflow.pytorch.load_model(mlflow_pyfunc_model_path)
                 break
             except (OSError, ValueError):
                 continue

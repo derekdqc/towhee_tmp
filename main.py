@@ -36,7 +36,7 @@ else:
 @require_torch
 class ImageClassificationPipelineTests(unittest.TestCase):
     pipeline_task = "image-classification"
-    small_models = ["mobilenet_v2"]  # Models tested without the @slow decorator
+    small_models = ["resnet"]  # Models tested without the @slow decorator
     valid_inputs = [
         # {"images": "http://images.cocodataset.org/val2017/000000039769.jpg"},
         # {

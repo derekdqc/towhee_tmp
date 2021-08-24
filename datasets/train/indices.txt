@@ -1,0 +1,2 @@
+/Users/derek/PycharmProjects/towhee_tmp/datasets/train/cat/000000039769.png:0
+/Users/derek/PycharmProjects/towhee_tmp/datasets/train/dog/dog1.jpeg:1

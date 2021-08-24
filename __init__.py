@@ -2631,7 +2631,7 @@ if TYPE_CHECKING:
         )
 
         # Trainer
-        from .trainer import Trainer
+        from .towhee_trainer import Trainer
         from .trainer_pt_utils import torch_distributed_zero_first
         from .trainer_seq2seq import Seq2SeqTrainer
     else:
