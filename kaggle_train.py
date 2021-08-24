@@ -69,6 +69,36 @@ def val_loader(path):
     return img_tensor
 
 
+class MyDataset(Dataset):
+    def __init__(self, images, labels, loader):
+        # 定义好 image 的路径
+        self.images = images
+        self.labels = labels
+        self.loader = loader
+
+    def __getitem__(self, index):
+        fn = self.images[index]
+        img = self.loader(fn)
+        label = self.labels[index]
+        return img, label
+
+    def __len__(self):
+        return len(self.images)
+
+
+train_data = MyDataset(file_train, label_train, train_loader)
+val_data = MyDataset(file_val, label_val, val_loader)
+train_loader = DataLoader(train_data, batch_size=4, shuffle=True)
+val_loader = DataLoader(val_data, batch_size=4, shuffle=True)
+
+dataloaders = {'train': train_loader,
+               'val': val_loader}
+dataset_sizes = {'train': len(train_data),
+                 'val': len(val_data)}
+
+device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
+
+
 def train_model(model, criterion, optimizer, scheduler, num_epochs=25):
     since = time.time()
 
@@ -137,35 +167,6 @@ def train_model(model, criterion, optimizer, scheduler, num_epochs=25):
     model.load_state_dict(best_model_wts)
     return model
 
-
-class MyDataset(Dataset):
-    def __init__(self, images, labels, loader):
-        # 定义好 image 的路径
-        self.images = images
-        self.labels = labels
-        self.loader = loader
-
-    def __getitem__(self, index):
-        fn = self.images[index]
-        img = self.loader(fn)
-        label = self.labels[index]
-        return img, label
-
-    def __len__(self):
-        return len(self.images)
-
-
-train_data = MyDataset(file_train, label_train, train_loader)
-val_data = MyDataset(file_val, label_val, val_loader)
-train_loader = DataLoader(train_data, batch_size=4, shuffle=True)
-val_loader = DataLoader(val_data, batch_size=4, shuffle=True)
-
-dataloaders = {'train': train_loader,
-               'val': val_loader}
-dataset_sizes = {'train': len(train_data),
-                 'val': len(val_data)}
-
-device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
 
 model_ft = torchvision.models.resnet18(pretrained=False)
 num_ftrs = model_ft.fc.in_features

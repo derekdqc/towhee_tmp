@@ -14,16 +14,16 @@ from torch.utils.data import Dataset, DataLoader
 from torchvision import transforms, utils
 
 df = pd.read_csv('./kaggle_dataset/labels.csv')
-# print(df.info())
-# print(df.head())
+print(df.info())
+print(df.head())
 breed = df['breed']
 breed_np = Series.to_numpy(breed)
-# print(type(breed_np))
-# print(breed_np.shape)  # (10222,)
+print(type(breed_np))
+print(breed_np.shape)  # (10222,)
 
 # 看一下一共多少不同种类
 breed_set = set(breed_np)
-# print(len(breed_set))  # 120
+print(len(breed_set))  # 120
 
 # 构建一个编号与名称对应的字典，以后输出的数字要变成名字的时候用：
 breed_120_list = list(breed_set)
@@ -32,27 +32,27 @@ for i in range(120):
     dic[breed_120_list[i]] = i
 
 file = Series.to_numpy(df["id"])
-# print(file.shape)
+print(file.shape)
 
 file = [i + ".jpg" for i in file]
 file = [os.path.join("./kaggle_dataset/train", i) for i in file]
 file_train = file[:8000]
 file_test = file[8000:]
-# print(file_train)
+print(file_train)
 
-# np.save("./kaggle_dataset/file_train.npy", file_train)
-# np.save("./kaggle_dataset/file_test.npy", file_test)
+np.save("./kaggle_dataset/file_train.npy", file_train)
+np.save("./kaggle_dataset/file_test.npy", file_test)
 
 breed = Series.to_numpy(df["breed"])
-# print(breed.shape)
+print(breed.shape)
 number = []
 for i in range(10222):
     number.append(dic[breed[i]])
 number = np.array(number)
 number_train = number[:8000]
 number_test = number[8000:]
-# np.save("./kaggle_dataset/number_train.npy", number_train)
-# np.save("./kaggle_dataset/number_test.npy", number_test)
+np.save("./kaggle_dataset/number_train.npy", number_train)
+np.save("./kaggle_dataset/number_test.npy", number_test)
 
 normalize = transforms.Normalize(
     mean=[0.485, 0.456, 0.406],
@@ -61,8 +61,6 @@ normalize = transforms.Normalize(
 preprocess = transforms.Compose([
     # transforms.Scale(256),
     # transforms.CenterCrop(224),
-    transforms.RandomResizedCrop(224),
-    transforms.RandomHorizontalFlip(),
     transforms.ToTensor(),
     normalize
 ])
@@ -70,7 +68,7 @@ preprocess = transforms.Compose([
 
 def default_loader(path):
     img_pil = Image.open(path)
-    # img_pil = img_pil.resize((224, 224))
+    img_pil = img_pil.resize((224, 224))
     img_tensor = preprocess(img_pil)
     return img_tensor
 
@@ -196,7 +194,7 @@ model_ft = torchvision.models.resnet18(pretrained=False)
 num_ftrs = model_ft.fc.in_features
 # Here the size of each output sample is set to 2.
 # Alternatively, it can be generalized to nn.Linear(num_ftrs, len(class_names)).
-model_ft.fc = nn.Linear(num_ftrs, 120)
+model_ft.fc = nn.Linear(num_ftrs, 2)
 
 model_ft = model_ft.to(device)
 
