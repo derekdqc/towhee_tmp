@@ -13,33 +13,32 @@ from torchvision import transforms
 from trainer import Trainer
 from training_args import TrainingArguments
 
-df = pd.read_csv('./kaggle_dataset/labels.csv')
-breed = df['breed']
-breed_np = Series.to_numpy(breed)
-
-# 看一下一共多少不同种类
-breed_set = set(breed_np)
-# 构建一个编号与名称对应的字典，以后输出的数字要变成名字的时候用：
-breed_120_list = list(breed_set)
-dic = {}
-for i in range(120):
-    dic[breed_120_list[i]] = i
-
-file = Series.to_numpy(df["id"])
-
-file = [i + ".jpg" for i in file]
-file = [os.path.join("./kaggle_dataset/train", i) for i in file]
-file_train = file[:8000]
-file_val = file[8000:]
-
-breed = Series.to_numpy(df["breed"])
-label = []
-for i in range(10222):
-    label.append(dic[breed[i]])
-# label = np.array(label)
-label_train = label[:8000]
-label_val = label[8000:]
-print('label_train: ', label_train)
+# df = pd.read_csv('./kaggle_dataset/labels.csv')
+# breed = df['category']
+# breed_np = Series.to_numpy(breed)
+#
+# # 看一下一共多少不同种类
+# breed_set = set(breed_np)
+# # 构建一个编号与名称对应的字典，以后输出的数字要变成名字的时候用：
+# breed_120_list = list(breed_set)
+# dic = {}
+# for i in range(120):
+#     dic[breed_120_list[i]] = i
+#
+# file = Series.to_numpy(df["image_name"])
+#
+# file = [i + ".jpg" for i in file]
+# file = [os.path.join("./kaggle_dataset/train", i) for i in file]
+# file_train = file[:8000]
+# file_val = file[8000:]
+#
+# breed = Series.to_numpy(df["category"])
+# label = []
+# for i in range(10222):
+#     label.append(dic[breed[i]])
+# # label = np.array(label)
+# label_train = label[:8000]
+# label_val = label[8000:]
 
 data_transforms = {
     'train': transforms.Compose([
@@ -69,25 +68,58 @@ def val_loader(path):
     return img_tensor
 
 
-class MyDataset(Dataset):
-    def __init__(self, images, labels, loader):
-        # 定义好 image 的路径
-        self.images = images
-        self.labels = labels
-        self.loader = loader
+class PytorchImageDataset(Dataset):
+    """
+        PytorchImageDataset is a dataset class for PyTorch.
+
+        Args:
+            image_path (:obj:`str`):
+                Path to the images for your dataset.
+
+            label_file (:obj:`Dict[str, str]`):
+                 Path to your label file. The label file should be a csv file. The columns should be [image_name, category],
+                'image_name' is the path of your image, 'category' is the label of accordance image. For example:
+                [000bec180eb18c7604dcecc8fe0dba07.jpg, dog] for one row. Note that the first row should be[image_name, category]
+        """
+
+    def __init__(self, image_path, label_file, data_transform=None):
+        self.image_path = image_path
+        self.label_file = label_file
+        self.data_transform = data_transform
 
     def __getitem__(self, index):
+        df = pd.read_csv(self.label_file)
+        self.images = Series.to_numpy(df['image_name'])
+        self.images = [i + ".jpg" for i in self.images]
+        self.images = [os.path.join("./kaggle_dataset/train", i) for i in self.images]
+
+        self.labels = Series.to_numpy(df['category'])
+        breed = df['category']
+        breed_np = Series.to_numpy(breed)
+        # 看一下一共多少不同种类
+        breed_set = set(breed_np)
+        # 构建一个编号与名称对应的字典，以后输出的数字要变成名字的时候用：
+        breed_120_list = list(breed_set)
+        dic = {}
+        for i in range(120):
+            dic[breed_120_list[i]] = i
+        labels = [dic[breed_np[i]] for i in range(len(self.labels))]
+
+        label = labels[index]
         fn = self.images[index]
-        img = self.loader(fn)
-        label = self.labels[index]
+        img = Image.open(fn)
+        if self.data_transform:
+            img = self.data_transform(img)
+
         return img, label
 
     def __len__(self):
-        return len(self.images)
+        df = pd.read_csv(self.label_file)
+        self.labels = Series.to_numpy(df['category'])
+        return len(self.labels)
 
 
-train_data = MyDataset(file_train, label_train, train_loader)
-val_data = MyDataset(file_val, label_val, val_loader)
+train_data = PytorchImageDataset('./kaggle_dataset/train', './kaggle_dataset/labels.csv', data_transforms['train'])
 
 model = torchvision.models.resnet18(pretrained=False)
 
