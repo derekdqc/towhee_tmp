@@ -13,33 +13,6 @@ from torchvision import transforms
 from trainer import Trainer
 from training_args import TrainingArguments
 
-# df = pd.read_csv('./kaggle_dataset/labels.csv')
-# breed = df['category']
-# breed_np = Series.to_numpy(breed)
-#
-# # 看一下一共多少不同种类
-# breed_set = set(breed_np)
-# # 构建一个编号与名称对应的字典，以后输出的数字要变成名字的时候用：
-# breed_120_list = list(breed_set)
-# dic = {}
-# for i in range(120):
-#     dic[breed_120_list[i]] = i
-#
-# file = Series.to_numpy(df["image_name"])
-#
-# file = [i + ".jpg" for i in file]
-# file = [os.path.join("./kaggle_dataset/train", i) for i in file]
-# file_train = file[:8000]
-# file_val = file[8000:]
-#
-# breed = Series.to_numpy(df["category"])
-# label = []
-# for i in range(10222):
-#     label.append(dic[breed[i]])
-# # label = np.array(label)
-# label_train = label[:8000]
-# label_val = label[8000:]
-
 data_transforms = {
     'train': transforms.Compose([
         transforms.RandomResizedCrop(224),
@@ -79,7 +52,7 @@ class PytorchImageDataset(Dataset):
             label_file (:obj:`Dict[str, str]`):
                  Path to your label file. The label file should be a csv file. The columns should be [image_name, category],
                 'image_name' is the path of your image, 'category' is the label of accordance image. For example:
-                [000bec180eb18c7604dcecc8fe0dba07.jpg, dog] for one row. Note that the first row should be[image_name, category]
+                [image_name, dog] for one row. Note that the first row should be[image_name, category]
         """
 
     def __init__(self, image_path, label_file, data_transform=None):
@@ -87,25 +60,23 @@ class PytorchImageDataset(Dataset):
         self.label_file = label_file
         self.data_transform = data_transform
 
-    def __getitem__(self, index):
         df = pd.read_csv(self.label_file)
-        self.images = Series.to_numpy(df['image_name'])
-        self.images = [i + ".jpg" for i in self.images]
-        self.images = [os.path.join("./kaggle_dataset/train", i) for i in self.images]
+        image_names = Series.to_numpy(df['image_name'])
+        images = [i + ".jpg" for i in image_names]
+        self.images = [os.path.join(self.image_path, i) for i in images]
 
-        self.labels = Series.to_numpy(df['category'])
-        breed = df['category']
-        breed_np = Series.to_numpy(breed)
+        categories = Series.to_numpy(df['category'])
         # 看一下一共多少不同种类
-        breed_set = set(breed_np)
+        breed_set = set(categories)
         # 构建一个编号与名称对应的字典，以后输出的数字要变成名字的时候用：
-        breed_120_list = list(breed_set)
-        dic = {}
-        for i in range(120):
-            dic[breed_120_list[i]] = i
-        labels = [dic[breed_np[i]] for i in range(len(self.labels))]
+        breed_list = list(breed_set)
+        dic = dict()
+        for i in range(len(breed_list)):
+            dic[breed_list[i]] = i
+        self.labels = [dic[categories[i]] for i in range(len(categories))]
 
-        label = labels[index]
+    def __getitem__(self, index):
+        label = self.labels[index]
         fn = self.images[index]
         img = Image.open(fn)
         if self.data_transform:
@@ -114,8 +85,6 @@ class PytorchImageDataset(Dataset):
         return img, label
 
     def __len__(self):
-        df = pd.read_csv(self.label_file)
-        self.labels = Series.to_numpy(df['category'])
         return len(self.labels)
 
 
