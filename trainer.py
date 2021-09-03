@@ -29,6 +29,7 @@ import warnings
 from logging import StreamHandler
 from pathlib import Path
 from typing import TYPE_CHECKING, Any, Callable, Dict, List, Optional, Tuple, Union
+from torch import nn, optim
 
 from tqdm.auto import tqdm
 
@@ -248,11 +249,7 @@ class Trainer:
         args._setup_devices
 
         if model is None:
-            if model_init is not None:
-                self.model_init = model_init
-                model = self.call_model_init()
-            else:
-                raise RuntimeError("`Trainer` requires either a `model` or `model_init` argument")
+            raise RuntimeError("`Trainer` requires either a `model` or `model_init` argument")
         else:
             if model_init is not None:
                 warnings.warn(
@@ -467,21 +464,21 @@ class Trainer:
                 ``model.forward()`` method are automatically removed. It must implement :obj:`__len__`.
         """
 
-        if isinstance(test_dataset, torch.utils.data.dataset.IterableDataset):
-            if self.args.world_size > 1:
-                test_dataset = IterableDatasetShard(
-                    test_dataset,
-                    batch_size=self.args.eval_batch_size,
-                    drop_last=self.args.dataloader_drop_last,
-                    num_processes=self.args.world_size,
-                    process_index=self.args.process_index,
-                )
-            return DataLoader(
-                test_dataset,
-                batch_size=self.args.eval_batch_size,
-                num_workers=self.args.dataloader_num_workers,
-                pin_memory=self.args.dataloader_pin_memory,
-            )
+        # if isinstance(test_dataset, torch.utils.data.dataset.IterableDataset):
+        #     if self.args.world_size > 1:
+        #         test_dataset = IterableDatasetShard(
+        #             test_dataset,
+        #             batch_size=self.args.eval_batch_size,
+        #             drop_last=self.args.dataloader_drop_last,
+        #             num_processes=self.args.world_size,
+        #             process_index=self.args.process_index,
+        #         )
+        #     return DataLoader(
+        #         test_dataset,
+        #         batch_size=self.args.eval_batch_size,
+        #         num_workers=self.args.dataloader_num_workers,
+        #         pin_memory=self.args.dataloader_pin_memory,
+        #     )
 
         # We use the same batch_size as for eval.
         return DataLoader(
@@ -509,38 +506,31 @@ class Trainer:
         We provide a reasonable default that works well. If you want to use something else, you can pass a tuple in the
         Trainer's init through :obj:`optimizers`, or subclass and override this method in a subclass.
         """
-        if self.optimizer is None:
-            decay_parameters = get_parameter_names(self.model, [nn.LayerNorm])
-            decay_parameters = [name for name in decay_parameters if "bias" not in name]
-            optimizer_grouped_parameters = [
-                {
-                    "params": [p for n, p in self.model.named_parameters() if n in decay_parameters],
-                    "weight_decay": self.args.weight_decay,
-                },
-                {
-                    "params": [p for n, p in self.model.named_parameters() if n not in decay_parameters],
-                    "weight_decay": 0.0,
-                },
-            ]
-            optimizer_cls = Adafactor if self.args.adafactor else AdamW
-            if self.args.adafactor:
-                optimizer_cls = Adafactor
-                optimizer_kwargs = {"scale_parameter": False, "relative_step": False}
-            else:
-                optimizer_cls = AdamW
-                optimizer_kwargs = {
-                    "betas": (self.args.adam_beta1, self.args.adam_beta2),
-                    "eps": self.args.adam_epsilon,
-                }
-            optimizer_kwargs["lr"] = self.args.learning_rate
-            if self.sharded_ddp == ShardedDDPOption.SIMPLE:
-                self.optimizer = OSS(
-                    params=optimizer_grouped_parameters,
-                    optim=optimizer_cls,
-                    **optimizer_kwargs,
-                )
-            else:
-                self.optimizer = optimizer_cls(optimizer_grouped_parameters, **optimizer_kwargs)
+        # if self.optimizer is None:
+        #     decay_parameters = get_parameter_names(self.model, [nn.LayerNorm])
+        #     decay_parameters = [name for name in decay_parameters if "bias" not in name]
+        #     optimizer_grouped_parameters = [
+        #         {
+        #             "params": [p for n, p in self.model.named_parameters() if n in decay_parameters],
+        #             "weight_decay": self.args.weight_decay,
+        #         },
+        #         {
+        #             "params": [p for n, p in self.model.named_parameters() if n not in decay_parameters],
+        #             "weight_decay": 0.0,
+        #         },
+        #     ]
+        #     if self.args.adafactor:
+        #         optimizer_cls = Adafactor
+        #         optimizer_kwargs = {"scale_parameter": False, "relative_step": False}
+        #     else:
+        #         optimizer_cls = AdamW
+        #         optimizer_kwargs = {
+        #             "betas": (self.args.adam_beta1, self.args.adam_beta2),
+        #             "eps": self.args.adam_epsilon,
+        #         }
+        #     optimizer_kwargs["lr"] = self.args.learning_rate
+        #     self.optimizer = optimizer_cls(optimizer_grouped_parameters, **optimizer_kwargs)
+        self.optimizer = optim.SGD(self.model.parameters(), lr=0.001, momentum=0.9)
 
     def create_scheduler(self, num_training_steps: int):
         """
@@ -549,19 +539,20 @@ class Trainer:
         Args:
             num_training_steps (int): The number of training steps to do.
         """
-        if self.lr_scheduler is None:
-            warmup_steps = (
-                self.args.warmup_steps
-                if self.args.warmup_steps > 0
-                else math.ceil(num_training_steps * self.args.warmup_ratio)
-            )
-
-            self.lr_scheduler = get_scheduler(
-                self.args.lr_scheduler_type,
-                self.optimizer,
-                num_warmup_steps=warmup_steps,
-                num_training_steps=num_training_steps,
-            )
+        # if self.lr_scheduler is None:
+        #     warmup_steps = (
+        #         self.args.warmup_steps
+        #         if self.args.warmup_steps > 0
+        #         else math.ceil(num_training_steps * self.args.warmup_ratio)
+        #     )
+        #
+        #     self.lr_scheduler = get_scheduler(
+        #         self.args.lr_scheduler_type,
+        #         self.optimizer,
+        #         num_warmup_steps=warmup_steps,
+        #         num_training_steps=num_training_steps,
+        #     )
+        self.lr_scheduler = optim.lr_scheduler.StepLR(self.optimizer, step_size=7, gamma=0.1)
 
     def num_examples(self, dataloader: DataLoader) -> int:
         """
@@ -570,36 +561,6 @@ class Trainer:
         Will raise an exception if the underlying dataset does not implement method :obj:`__len__`
         """
         return len(dataloader.dataset)
-
-    def call_model_init(self, trial=None):
-        model_init_argcount = number_of_arguments(self.model_init)
-        if model_init_argcount == 0:
-            model = self.model_init()
-        elif model_init_argcount == 1:
-            model = self.model_init(trial)
-        else:
-            raise RuntimeError("model_init should have 0 or 1 argument.")
-
-        if model is None:
-            raise RuntimeError("model_init should not return None.")
-
-        return model
-
-    def _wrap_model(self, model, training=True):
-        # train/eval could be run multiple-times - if already wrapped, don't re-wrap it again
-        if unwrap_model(model) is not model:
-            return model
-
-        # Multi-gpu training (should be after apex fp16 initialization)
-        if self.args.n_gpu > 1:
-            model = nn.DataParallel(model)
-
-        # Note: in torch.distributed mode, there's no point in wrapping the model
-        # inside a DistributedDataParallel as we'll be under `no_grad` anyways.
-        if not training:
-            return model
-
-        return model
 
     def train(
         self,
@@ -632,71 +593,6 @@ class Trainer:
         args = self.args
 
         self.is_in_train = True
-
-        # do_train is not a reliable argument, as it might not be set and .train() still called, so
-        # the following is a workaround:
-        if args.fp16_full_eval and not args.do_train:
-            self.model = self.model.to(args.device)
-
-        if "model_path" in kwargs:
-            resume_from_checkpoint = kwargs.pop("model_path")
-            warnings.warn(
-                "`model_path` is deprecated and will be removed in a future version. Use `resume_from_checkpoint` "
-                "instead.",
-                FutureWarning,
-            )
-        if len(kwargs) > 0:
-            raise TypeError(f"train() received got unexpected keyword arguments: {', '.join(list(kwargs.keys()))}.")
-
-        # Model re-init
-        model_reloaded = False
-        if self.model_init is not None:
-            # Seed must be set before instantiating the model when using model_init.
-            set_seed(args.seed)
-            self.model = self.call_model_init(trial)
-            model_reloaded = True
-            # Reinitializes optimizer and scheduler
-            self.optimizer, self.lr_scheduler = None, None
-
-        # Load potential model checkpoint
-        if isinstance(resume_from_checkpoint, bool) and resume_from_checkpoint:
-            resume_from_checkpoint = get_last_checkpoint(args.output_dir)
-            if resume_from_checkpoint is None:
-                raise ValueError(f"No valid checkpoint found in output directory ({args.output_dir})")
-
-        if resume_from_checkpoint is not None:
-            if not os.path.isfile(os.path.join(resume_from_checkpoint, WEIGHTS_NAME)):
-                raise ValueError(f"Can't find a valid checkpoint at {resume_from_checkpoint}")
-
-            logger.info(f"Loading model from {resume_from_checkpoint}).")
-
-            if os.path.isfile(os.path.join(resume_from_checkpoint, CONFIG_NAME)):
-                config = PretrainedConfig.from_json_file(os.path.join(resume_from_checkpoint, CONFIG_NAME))
-                checkpoint_version = config.transformers_version
-                if checkpoint_version is not None and checkpoint_version != __version__:
-                    logger.warn(
-                        f"You are resuming training from a checkpoint trained with {checkpoint_version} of "
-                        f"Transformers but your current version is {__version__}. This is not recommended and could "
-                        "yield to errors or unwanted behaviors."
-                    )
-
-            if args.deepspeed:
-                # will be resumed in deepspeed_init
-                pass
-            else:
-                # We load the model state dict on the CPU to avoid an OOM error.
-                state_dict = torch.load(os.path.join(resume_from_checkpoint, WEIGHTS_NAME), map_location="cpu")
-                # If the model is on the GPU, it still works!
-                self._load_state_dict_in_model(state_dict)
-
-                # release memory
-                del state_dict
-
-        # If model was re-initialized, put it on the right device and update self.model_wrapped
-        if model_reloaded:
-            if self.place_model_on_device:
-                self.model = self.model.to(args.device)
-            self.model_wrapped = self.model
 
         # Keeping track whether we can can len() on the dataset or not
         train_dataset_is_sized = isinstance(self.train_dataset, collections.abc.Sized)
@@ -732,33 +628,17 @@ class Trainer:
             num_update_steps_per_epoch = max_steps
             num_train_samples = args.max_steps * total_train_batch_size
 
-        # if DebugOption.UNDERFLOW_OVERFLOW in self.args.debug:
-        #     debug_overflow = DebugUnderflowOverflow(self.model)  # noqa
-
-        delay_optimizer_creation = self.sharded_ddp is not None and self.sharded_ddp != ShardedDDPOption.SIMPLE
-        if args.deepspeed:
-            deepspeed_engine, optimizer, lr_scheduler = deepspeed_init(
-                self, num_training_steps=max_steps, resume_from_checkpoint=resume_from_checkpoint
-            )
-            self.model = deepspeed_engine.module
-            self.model_wrapped = deepspeed_engine
-            self.deepspeed = deepspeed_engine
-            self.optimizer = optimizer
-            self.lr_scheduler = lr_scheduler
-        elif not delay_optimizer_creation:
-            self.create_optimizer_and_scheduler(num_training_steps=max_steps)
+        self.create_optimizer_and_scheduler(num_training_steps=max_steps)
 
         self.state = TrainerState()
         self.state.is_hyper_param_search = trial is not None
 
-        model = self._wrap_model(self.model_wrapped)
+        model = self.model
+        # model = self._wrap_model(self.model_wrapped)
 
         # for the rest of this function `model` is the outside model, whether it was wrapped or not
-        if model is not self.model:
-            self.model_wrapped = model
-
-        if delay_optimizer_creation:
-            self.create_optimizer_and_scheduler(num_training_steps=max_steps)
+        # if model is not self.model:
+        #     self.model_wrapped = model
 
         # Check if saved optimizer or scheduler states exist
         self._load_optimizer_and_scheduler(resume_from_checkpoint)
