@@ -634,18 +634,6 @@ class Trainer:
         self.state.is_hyper_param_search = trial is not None
 
         model = self.model
-        # model = self._wrap_model(self.model_wrapped)
-
-        # for the rest of this function `model` is the outside model, whether it was wrapped or not
-        # if model is not self.model:
-        #     self.model_wrapped = model
-
-        # Check if saved optimizer or scheduler states exist
-        self._load_optimizer_and_scheduler(resume_from_checkpoint)
-
-        # important: at this point:
-        # self.model         is the Transformers Model
-        # self.model_wrapped is DDP(Transformers Model), Deepspeed(Transformers Model), etc.
 
         # Train!
         num_examples = (
@@ -807,33 +795,6 @@ class Trainer:
             delattr(self, "_past")
 
         logger.info("\n\nTraining completed. Do not forget to share your model on huggingface.co/models =)\n\n")
-        if args.load_best_model_at_end and self.state.best_model_checkpoint is not None:
-            # Wait for everyone to get here so we are sur the model has been saved by process 0.
-            if is_torch_tpu_available():
-                xm.rendezvous("load_best_model_at_end")
-            elif args.local_rank != -1:
-                dist.barrier()
-
-            logger.info(
-                f"Loading best model from {self.state.best_model_checkpoint} (score: {self.state.best_metric})."
-            )
-
-            best_model_path = os.path.join(self.state.best_model_checkpoint, WEIGHTS_NAME)
-            if os.path.exists(best_model_path):
-                # We load the model state dict on the CPU to avoid an OOM error.
-                state_dict = torch.load(best_model_path, map_location="cpu")
-                # If the model is on the GPU, it still works!
-                self._load_state_dict_in_model(state_dict)
-            else:
-                logger.warn(
-                    f"Could not locate the best model at {best_model_path}, if you are running a distributed training "
-                    "on multiple nodes, you should activate `--save_on_each_node`."
-                )
-
-            if self.deepspeed:
-                self.deepspeed.load_checkpoint(
-                    self.state.best_model_checkpoint, load_optimizer_states=False, load_lr_scheduler_states=False
-                )
 
         # add remaining tr_loss
         self._total_loss_scalar += tr_loss.item()
@@ -854,17 +815,6 @@ class Trainer:
 
         return TrainOutput(self.state.global_step, train_loss, metrics)
 
-    def _load_state_dict_in_model(self, state_dict):
-        load_result = self.model.load_state_dict(state_dict, strict=False)
-
-        if len(load_result.missing_keys) != 0:
-            if set(load_result.missing_keys) == set(self.model._keys_to_ignore_on_save):
-                self.model.tie_weights()
-            else:
-                logger.warn(f"There were missing keys in the checkpoint model loaded: {load_result.missing_keys}.")
-        if len(load_result.unexpected_keys) != 0:
-            logger.warn(f"There were unexpected keys in the checkpoint model loaded: {load_result.unexpected_keys}.")
-
     def _maybe_log_save_evaluate(self, tr_loss, model, trial, epoch, ignore_keys_for_eval):
         if self.control.should_log:
             logs: Dict[str, float] = {}
@@ -882,66 +832,26 @@ class Trainer:
             self.log(logs)
 
         metrics = None
-        if self.control.should_evaluate:
-            metrics = self.evaluate(ignore_keys=ignore_keys_for_eval)
-            self._report_to_hp_search(trial, epoch, metrics)
-
         if self.control.should_save:
             self._save_checkpoint(model, trial, metrics=metrics)
             self.control = self.callback_handler.on_save(self.args, self.state, self.control)
 
     def _save_checkpoint(self, model, trial, metrics=None):
-        # In all cases, including ddp/dp/deepspeed, self.model is always a reference to the model we
-        # want to save except FullyShardedDDP.
-        # assert unwrap_model(model) is self.model, "internal model should be a reference to self.model"
-
         # Save model checkpoint
         checkpoint_folder = f"{PREFIX_CHECKPOINT_DIR}-{self.state.global_step}"
 
-        if self.hp_search_backend is not None and trial is not None:
-            if self.hp_search_backend == HPSearchBackend.OPTUNA:
-                run_id = trial.number
-            else:
-                from ray import tune
-
-                run_id = tune.get_trial_id()
-            run_name = self.hp_name(trial) if self.hp_name is not None else f"run-{run_id}"
-            run_dir = os.path.join(self.args.output_dir, run_name)
-        else:
-            run_dir = self.args.output_dir
-            self.store_flos()
+        run_dir = self.args.output_dir
+        self.store_flos()
 
         output_dir = os.path.join(run_dir, checkpoint_folder)
         self.save_model(output_dir)
 
         # Save optimizer and scheduler
-        if self.sharded_ddp == ShardedDDPOption.SIMPLE:
-            self.optimizer.consolidate_state_dict()
-
-        if self.args.should_save and not self.deepspeed:
-            # deepspeed.save_checkpoint above saves model/optim/sched
+        if self.args.should_save:
             torch.save(self.optimizer.state_dict(), os.path.join(output_dir, "optimizer.pt"))
             with warnings.catch_warnings(record=True) as caught_warnings:
                 torch.save(self.lr_scheduler.state_dict(), os.path.join(output_dir, "scheduler.pt"))
             reissue_pt_warnings(caught_warnings)
-            if self.use_amp:
-                torch.save(self.scaler.state_dict(), os.path.join(output_dir, "scaler.pt"))
-
-        # Determine the new best metric / best model checkpoint
-        if metrics is not None and self.args.metric_for_best_model is not None:
-            metric_to_check = self.args.metric_for_best_model
-            if not metric_to_check.startswith("eval_"):
-                metric_to_check = f"eval_{metric_to_check}"
-            metric_value = metrics[metric_to_check]
-
-            operator = np.greater if self.args.greater_is_better else np.less
-            if (
-                self.state.best_metric is None
-                or self.state.best_model_checkpoint is None
-                or operator(metric_value, self.state.best_metric)
-            ):
-                self.state.best_metric = metric_value
-                self.state.best_model_checkpoint = output_dir
 
         # Save the Trainer state
         if self.args.should_save:
@@ -960,39 +870,6 @@ class Trainer:
             else:
                 rng_states["cuda"] = torch.cuda.random.get_rng_state()
 
-        # A process can arrive here before the process 0 has a chance to save the model, in which case output_dir may
-        # not yet exist.
-        # os.makedirs(output_dir, exist_ok=True)
-        # local_rank = xm.get_local_ordinal() if is_torch_tpu_available() else self.args.local_rank
-        # if local_rank == -1:
-        #     torch.save(rng_states, os.path.join(output_dir, "rng_state.pth"))
-        # else:
-        #     torch.save(rng_states, os.path.join(output_dir, f"rng_state_{local_rank}.pth"))
-        #
-        # # Maybe delete some older checkpoints.
-        # if self.args.should_save:
-        #     self._rotate_checkpoints(use_mtime=True, output_dir=run_dir)
-
-    def _load_optimizer_and_scheduler(self, checkpoint):
-        """If optimizer and scheduler states exist, load them."""
-        if checkpoint is None:
-            return
-
-        if os.path.isfile(os.path.join(checkpoint, "optimizer.pt")) and os.path.isfile(
-            os.path.join(checkpoint, "scheduler.pt")
-        ):
-            # Load in optimizer and scheduler states
-            # map_location = "cpu" if is_sagemaker_mp_enabled() else self.args.device
-            map_location = self.args.device
-            self.optimizer.load_state_dict(
-                torch.load(os.path.join(checkpoint, "optimizer.pt"), map_location=map_location)
-            )
-            with warnings.catch_warnings(record=True) as caught_warnings:
-                self.lr_scheduler.load_state_dict(torch.load(os.path.join(checkpoint, "scheduler.pt")))
-            reissue_pt_warnings(caught_warnings)
-            if self.use_amp and os.path.isfile(os.path.join(checkpoint, "scaler.pt")):
-                self.scaler.load_state_dict(torch.load(os.path.join(checkpoint, "scaler.pt")))
-
     def log(self, logs: Dict[str, float]) -> None:
         """
         Log :obj:`logs` on the various objects watching training.
@@ -1009,27 +886,6 @@ class Trainer:
         output = {**logs, **{"step": self.state.global_step}}
         self.state.log_history.append(output)
         self.control = self.callback_handler.on_log(self.args, self.state, self.control, logs)
-
-    def _prepare_inputs(self, inputs: Dict[str, Union[torch.Tensor, Any]]) -> Dict[str, Union[torch.Tensor, Any]]:
-        """
-        Prepare :obj:`inputs` before feeding them to the model, converting them to tensors if they are not already and
-        handling potential state.
-        """
-        for k, v in inputs.items():
-            if isinstance(v, torch.Tensor):
-                kwargs = dict(device=self.args.device)
-                if self.deepspeed and inputs[k].dtype != torch.int64:
-                    # NLP models inputs are int64 and those get adjusted to the right dtype of the
-                    # embedding. Other models such as wav2vec2's inputs are already float and thus
-                    # may need special handling to match the dtypes of the model
-                    kwargs.update(dict(dtype=self.args.hf_deepspeed_config.dtype()))
-
-                inputs[k] = v.to(**kwargs)
-
-        if self.args.past_index >= 0 and self._past is not None:
-            inputs["mems"] = self._past
-
-        return inputs
 
     def training_step(self, model: nn.Module, inputs: Dict[str, Union[torch.Tensor, Any]]) -> torch.Tensor:
         """
@@ -1054,23 +910,9 @@ class Trainer:
 
         loss = self.compute_loss(model, inputs)
 
-        # if self.args.n_gpu > 1:
-        #     loss = loss.mean()  # mean() to average on multi-gpu parallel training
-        #
-        # if self.args.gradient_accumulation_steps > 1 and not self.deepspeed:
-        #     # deepspeed handles loss scaling by gradient_accumulation_steps in its `backward`
-        #     loss = loss / self.args.gradient_accumulation_steps
+        if self.args.n_gpu > 1:
+            loss = loss.mean()  # mean() to average on multi-gpu parallel training
 
-        # if self.use_amp:
-        #     self.scaler.scale(loss).backward()
-        # elif self.use_apex:
-        #     with amp.scale_loss(loss, self.optimizer) as scaled_loss:
-        #         scaled_loss.backward()
-        # elif self.deepspeed:
-        #     # loss gets scaled under gradient_accumulation_steps in deepspeed
-        #     loss = self.deepspeed.backward(loss)
-        # else:
-        #     loss.backward()
         loss.backward()
 
         return loss.detach()
@@ -1081,10 +923,6 @@ class Trainer:
 
         Subclass and override for custom behavior.
         """
-        # if self.label_smoother is not None and "labels" in inputs:
-        #     labels = inputs.pop("labels")
-        # else:
-        #     labels = None
         labels = inputs[1]
         outputs = model(inputs[0])
         # Save past state if it exists
@@ -1562,7 +1400,7 @@ class Trainer:
             logits and labels (each being optional).
         """
         has_labels = all(inputs.get(k) is not None for k in self.label_names)
-        inputs = self._prepare_inputs(inputs)
+        # inputs = self._prepare_inputs(inputs)
         if ignore_keys is None:
             if hasattr(self.model, "config"):
                 ignore_keys = getattr(self.model.config, "keys_to_ignore_at_inference", [])

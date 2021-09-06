@@ -109,3 +109,4 @@ trainer = Trainer(
     train_dataset=train_data,
 )
 trainer.train()
+# trainer.predict()
