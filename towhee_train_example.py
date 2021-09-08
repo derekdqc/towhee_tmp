@@ -82,7 +82,7 @@ class PytorchImageDataset(Dataset):
         if self.data_transform:
             img = self.data_transform(img)
 
-        return img, label
+        return (img, label)
 
     def __len__(self):
         return len(self.labels)

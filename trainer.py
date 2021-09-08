@@ -352,26 +352,6 @@ class Trainer:
             raise ValueError("Trainer: training requires a train_dataset.")
 
         train_dataset = self.train_dataset
-        # if is_datasets_available() and isinstance(train_dataset, datasets.Dataset):
-        #     train_dataset = self._remove_unused_columns(train_dataset, description="training")
-        #
-        # if isinstance(train_dataset, torch.utils.data.dataset.IterableDataset):
-        #     if self.args.world_size > 1:
-        #         train_dataset = IterableDatasetShard(
-        #             train_dataset,
-        #             batch_size=self.args.train_batch_size,
-        #             drop_last=self.args.dataloader_drop_last,
-        #             num_processes=self.args.world_size,
-        #             process_index=self.args.process_index,
-        #         )
-        #
-        #     return DataLoader(
-        #         train_dataset,
-        #         batch_size=self.args.train_batch_size,
-        #         collate_fn=self.data_collator,
-        #         num_workers=self.args.dataloader_num_workers,
-        #         pin_memory=self.args.dataloader_pin_memory,
-        #     )
 
         return DataLoader(
             train_dataset,
@@ -415,24 +395,6 @@ class Trainer:
                 The test dataset to use. If it is an :obj:`datasets.Dataset`, columns not accepted by the
                 ``model.forward()`` method are automatically removed. It must implement :obj:`__len__`.
         """
-
-        # if isinstance(test_dataset, torch.utils.data.dataset.IterableDataset):
-        #     if self.args.world_size > 1:
-        #         test_dataset = IterableDatasetShard(
-        #             test_dataset,
-        #             batch_size=self.args.eval_batch_size,
-        #             drop_last=self.args.dataloader_drop_last,
-        #             num_processes=self.args.world_size,
-        #             process_index=self.args.process_index,
-        #         )
-        #     return DataLoader(
-        #         test_dataset,
-        #         batch_size=self.args.eval_batch_size,
-        #         num_workers=self.args.dataloader_num_workers,
-        #         pin_memory=self.args.dataloader_pin_memory,
-        #     )
-
-        # We use the same batch_size as for eval.
         return DataLoader(
             test_dataset,
             batch_size=self.args.eval_batch_size,
@@ -458,30 +420,6 @@ class Trainer:
         We provide a reasonable default that works well. If you want to use something else, you can pass a tuple in the
         Trainer's init through :obj:`optimizers`, or subclass and override this method in a subclass.
         """
-        # if self.optimizer is None:
-        #     decay_parameters = get_parameter_names(self.model, [nn.LayerNorm])
-        #     decay_parameters = [name for name in decay_parameters if "bias" not in name]
-        #     optimizer_grouped_parameters = [
-        #         {
-        #             "params": [p for n, p in self.model.named_parameters() if n in decay_parameters],
-        #             "weight_decay": self.args.weight_decay,
-        #         },
-        #         {
-        #             "params": [p for n, p in self.model.named_parameters() if n not in decay_parameters],
-        #             "weight_decay": 0.0,
-        #         },
-        #     ]
-        #     if self.args.adafactor:
-        #         optimizer_cls = Adafactor
-        #         optimizer_kwargs = {"scale_parameter": False, "relative_step": False}
-        #     else:
-        #         optimizer_cls = AdamW
-        #         optimizer_kwargs = {
-        #             "betas": (self.args.adam_beta1, self.args.adam_beta2),
-        #             "eps": self.args.adam_epsilon,
-        #         }
-        #     optimizer_kwargs["lr"] = self.args.learning_rate
-        #     self.optimizer = optimizer_cls(optimizer_grouped_parameters, **optimizer_kwargs)
         self.optimizer = optim.SGD(self.model.parameters(), lr=0.001, momentum=0.9)
 
     def create_scheduler(self, num_training_steps: int):
@@ -491,19 +429,6 @@ class Trainer:
         Args:
             num_training_steps (int): The number of training steps to do.
         """
-        # if self.lr_scheduler is None:
-        #     warmup_steps = (
-        #         self.args.warmup_steps
-        #         if self.args.warmup_steps > 0
-        #         else math.ceil(num_training_steps * self.args.warmup_ratio)
-        #     )
-        #
-        #     self.lr_scheduler = get_scheduler(
-        #         self.args.lr_scheduler_type,
-        #         self.optimizer,
-        #         num_warmup_steps=warmup_steps,
-        #         num_training_steps=num_training_steps,
-        #     )
         self.lr_scheduler = optim.lr_scheduler.StepLR(self.optimizer, step_size=7, gamma=0.1)
 
     def num_examples(self, dataloader: DataLoader) -> int:
