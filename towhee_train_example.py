@@ -88,18 +88,17 @@ class PytorchImageDataset(Dataset):
         return len(self.labels)
 
 
-train_data = PytorchImageDataset('./kaggle_dataset/train', './kaggle_dataset/labels.csv', data_transforms['train'])
+train_data = PytorchImageDataset('./kaggle_dataset_small/train', './kaggle_dataset_small/train/train_labels.csv', data_transforms['train'])
+eval_data = PytorchImageDataset('./kaggle_dataset_small/eval', './kaggle_dataset_small/eval/eval_labels.csv', data_transforms['val'])
 
-model = torchvision.models.resnet18(pretrained=False)
+model = torchvision.models.resnet50(pretrained=True)
 
 
 training_args = TrainingArguments(
-    output_dir="./EsperBERTo",
+    output_dir="./ResNet50",
     overwrite_output_dir=True,
     num_train_epochs=1,
-    per_gpu_train_batch_size=64,
-    save_steps=10_000,
-    save_total_limit=2,
+    per_gpu_train_batch_size=4,
     prediction_loss_only=True,
 )
 
@@ -107,6 +106,8 @@ trainer = Trainer(
     model=model,
     args=training_args,
     train_dataset=train_data,
+    eval_dataset=eval_data
 )
-trainer.train()
+# trainer.train()
+trainer.evaluate()
 # trainer.predict()

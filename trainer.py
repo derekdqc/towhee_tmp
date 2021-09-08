@@ -439,19 +439,9 @@ class Trainer:
         """
         return len(dataloader.dataset)
 
-    def train(
-            self,
-            resume_from_checkpoint: Optional[Union[str, bool]] = None,
-    ):
+    def train(self):
         """
         Main training entry point.
-
-        Args:
-            resume_from_checkpoint (:obj:`str` or :obj:`bool`, `optional`):
-                If a :obj:`str`, local path to a saved checkpoint as saved by a previous instance of
-                :class:`~trainer.towhee.Trainer`. If a :obj:`bool` and equals `True`, load the last checkpoint in
-                `args.output_dir` as saved by a previous instance of :class:`~trainer.towhee.Trainer`. If present,
-                training will resume from the model/optimizer/scheduler states loaded here.
         """
 
         # memory metrics - must set up as early as possible
@@ -520,31 +510,6 @@ class Trainer:
         steps_trained_in_current_epoch = 0
         steps_trained_progress_bar = None
 
-        # Check if continuing training from a checkpoint
-        if resume_from_checkpoint is not None and os.path.isfile(
-                os.path.join(resume_from_checkpoint, "trainer_state.json")
-        ):
-            self.state = TrainerState.load_from_json(os.path.join(resume_from_checkpoint, "trainer_state.json"))
-            epochs_trained = self.state.global_step // num_update_steps_per_epoch
-            if not args.ignore_data_skip:
-                steps_trained_in_current_epoch = self.state.global_step % (num_update_steps_per_epoch)
-                steps_trained_in_current_epoch *= args.gradient_accumulation_steps
-            else:
-                steps_trained_in_current_epoch = 0
-
-            logger.info("  Continuing training from checkpoint, will skip to saved global_step")
-            logger.info(f"  Continuing training from epoch {epochs_trained}")
-            logger.info(f"  Continuing training from global step {self.state.global_step}")
-            if not args.ignore_data_skip:
-                logger.info(
-                    f"  Will skip the first {epochs_trained} epochs then the first {steps_trained_in_current_epoch} "
-                    "batches in the first epoch. If this takes a lot of time, you can add the `--ignore_data_skip` "
-                    "flag to your launch command, but you will resume the training on data already seen by your model."
-                )
-                if self.is_local_process_zero() and not args.disable_tqdm:
-                    steps_trained_progress_bar = tqdm(total=steps_trained_in_current_epoch)
-                    steps_trained_progress_bar.set_description("Skipping the first batches")
-
         # Update the references
         self.callback_handler.model = self.model
         self.callback_handler.optimizer = self.optimizer
@@ -554,8 +519,6 @@ class Trainer:
         # to set this after the load.
         self.state.max_steps = max_steps
         self.state.num_train_epochs = num_train_epochs
-        self.state.is_local_process_zero = self.is_local_process_zero()
-        self.state.is_world_process_zero = self.is_world_process_zero()
 
         # tr_loss is a tensor to avoid synchronization of TPUs through .item()
         tr_loss = torch.tensor(0.0).to(args.device)
@@ -733,7 +696,7 @@ class Trainer:
         self.state.log_history.append(output)
         self.control = self.callback_handler.on_log(self.args, self.state, self.control, logs)
 
-    def training_step(self, model: nn.Module, inputs: Dict[str, Union[torch.Tensor, Any]]) -> torch.Tensor:
+    def training_step(self, model: nn.Module, inputs: List[torch.Tensor]) -> torch.Tensor:
         """
         Perform a training step on a batch of inputs.
 
@@ -763,7 +726,7 @@ class Trainer:
 
         return loss.detach()
 
-    def compute_loss(self, model, inputs, return_outputs=False):
+    def compute_loss(self, model, inputs):
         """
         How the loss is computed by Trainer. By default, all models return the loss in the first element.
 
@@ -787,22 +750,6 @@ class Trainer:
         # return (loss, outputs) if return_outputs else loss
         return loss
 
-    def is_local_process_zero(self) -> bool:
-        """
-        Whether or not this process is the local (e.g., on one machine if training in a distributed fashion on several
-        machines) main process.
-        """
-        return self.args.local_process_index == 0
-
-    def is_world_process_zero(self) -> bool:
-        """
-        Whether or not this process is the global main process (when training in a distributed fashion on several
-        machines, this is only going to be :obj:`True` for one process).
-        """
-        # Special case for SageMaker ModelParallel since there process_index is dp_process_index, not the global
-        # process index.
-        return self.args.process_index == 0
-
     def save_model(self, output_dir: Optional[str] = None):
         """
         Will save the model, so you can reload it using :obj:`from_pretrained()`.
@@ -813,36 +760,7 @@ class Trainer:
         if output_dir is None:
             output_dir = self.args.output_dir
 
-        if (
-                ShardedDDPOption.ZERO_DP_2 in self.args.sharded_ddp or ShardedDDPOption.ZERO_DP_3 in self.args.sharded_ddp
-        ):
-            state_dict = self.model.state_dict()
-
-            if self.args.should_save:
-                self._save(output_dir, state_dict=state_dict)
-        elif self.deepspeed:
-
-            # this takes care of everything as long as we aren't under zero3
-            if self.args.should_save:
-                self._save(output_dir)
-
-            if is_deepspeed_zero3_enabled():
-                # It's too complicated to try to override different places where the weights dump gets
-                # saved, so since under zero3 the file is bogus, simply delete it. The user should
-                # either user deepspeed checkpoint to resume or to recover full weights use
-                # zero_to_fp32.py stored in the checkpoint.
-                if self.args.should_save:
-                    file = os.path.join(output_dir, WEIGHTS_NAME)
-                    if os.path.isfile(file):
-                        # logger.info(f"deepspeed zero3: removing {file}, see zero_to_fp32.py to recover weights")
-                        os.remove(file)
-
-                # now save the real model if stage3_gather_fp16_weights_on_model_save=True
-                # if false it will not be saved.
-                # This must be called on all ranks
-                self.deepspeed.save_fp16_model(output_dir, WEIGHTS_NAME)
-
-        elif self.args.should_save:
+        if self.args.should_save:
             self._save(output_dir)
 
     def _save(self, output_dir: Optional[str] = None, state_dict=None):
@@ -853,19 +771,12 @@ class Trainer:
         # Save a trained model and configuration using `save_pretrained()`.
         # They can then be reloaded using `from_pretrained()`
         if not isinstance(self.model, PreTrainedModel):
-            if isinstance(unwrap_model(self.model), PreTrainedModel):
-                if state_dict is None:
-                    state_dict = self.model.state_dict()
-                unwrap_model(self.model).save_pretrained(output_dir, state_dict=state_dict)
-            else:
-                logger.info("Trainer.model is not a `PreTrainedModel`, only saving its state dict.")
-                if state_dict is None:
-                    state_dict = self.model.state_dict()
-                torch.save(state_dict, os.path.join(output_dir, WEIGHTS_NAME))
+            logger.info("Trainer.model is not a `PreTrainedModel`, only saving its state dict.")
+            if state_dict is None:
+                state_dict = self.model.state_dict()
+            torch.save(state_dict, os.path.join(output_dir, WEIGHTS_NAME))
         else:
             self.model.save_pretrained(output_dir, state_dict=state_dict)
-        if self.tokenizer is not None:
-            self.tokenizer.save_pretrained(output_dir)
 
         # Good practice: save your training arguments together with the trained model
         torch.save(self.args, os.path.join(output_dir, "training_args.bin"))
@@ -915,7 +826,7 @@ class Trainer:
         eval_dataloader = self.get_eval_dataloader(eval_dataset)
         start_time = time.time()
 
-        eval_loop = self.prediction_loop if self.args.use_legacy_prediction_loop else self.evaluation_loop
+        eval_loop = self.evaluation_loop
         output = eval_loop(
             eval_dataloader,
             description="Evaluation",
@@ -937,11 +848,6 @@ class Trainer:
         )
 
         self.log(output.metrics)
-
-        if DebugOption.TPU_METRICS_DEBUG in self.args.debug:
-            # tpu-comment: Logging debug metrics for PyTorch/XLA (compile, execute times, ops, etc.)
-            xm.master_print(met.metrics_report())
-
         self.control = self.callback_handler.on_evaluate(self.args, self.state, self.control, output.metrics)
 
         self._memory_tracker.stop_and_update_metrics(output.metrics)
@@ -1021,28 +927,7 @@ class Trainer:
         prediction_loss_only = (
             prediction_loss_only if prediction_loss_only is not None else self.args.prediction_loss_only
         )
-
-        # if eval is called w/o train init deepspeed here
-        if self.args.deepspeed and not self.deepspeed:
-            # XXX: eval doesn't have `resume_from_checkpoint` arg but we should be able to do eval
-            # from the checkpoint eventually
-            deepspeed_engine, _, _ = deepspeed_init(self, num_training_steps=0, resume_from_checkpoint=None)
-            self.model = deepspeed_engine.module
-            self.model_wrapped = deepspeed_engine
-            self.deepspeed = deepspeed_engine
-            # XXX: we don't need optim/sched for inference, but this needs to be sorted out, since
-            # for example the Z3-optimizer is a must for zero3 to work even for inference - what we
-            # don't need is the deepspeed basic optimizer which is self.optimizer.optimizer
-            deepspeed_engine.optimizer.optimizer = None
-            deepspeed_engine.lr_scheduler = None
-
-        model = self._wrap_model(self.model, training=False)
-
-        # if full fp16 is wanted on eval and this ``evaluation`` or ``predict`` isn't called while
-        # ``train`` is running, halve it first and then put on device
-        if not self.is_in_train and self.args.fp16_full_eval:
-            model = model.half().to(self.args.device)
-
+        model = self.model
         batch_size = dataloader.batch_size
 
         logger.info(f"***** Running {description} *****")
@@ -1057,12 +942,6 @@ class Trainer:
         self.callback_handler.eval_dataloader = dataloader
         # Do this before wrapping.
         eval_dataset = dataloader.dataset
-
-        if is_torch_tpu_available():
-            dataloader = pl.ParallelLoader(dataloader, [self.args.device]).per_device_loader(self.args.device)
-
-        if self.args.past_index >= 0:
-            self._past = None
 
         # Initialize containers
         # losses/preds/labels on GPU/TPU (accumulated for eval_accumulation_steps)
@@ -1079,9 +958,9 @@ class Trainer:
         # Main evaluation loop
         for step, inputs in enumerate(dataloader):
             # Update the observed num examples
-            observed_batch_size = find_batch_size(inputs)
-            if observed_batch_size is not None:
-                observed_num_examples += observed_batch_size
+            # observed_batch_size = find_batch_size(inputs)
+            # if observed_batch_size is not None:
+            #     observed_num_examples += observed_batch_size
 
             # Prediction step
             loss, logits, labels = self.prediction_step(model, inputs, prediction_loss_only, ignore_keys=ignore_keys)
@@ -1217,9 +1096,8 @@ class Trainer:
     def prediction_step(
             self,
             model: nn.Module,
-            inputs: Dict[str, Union[torch.Tensor, Any]],
+            inputs: List[torch.Tensor],
             prediction_loss_only: bool,
-            ignore_keys: Optional[List[str]] = None,
     ) -> Tuple[Optional[torch.Tensor], Optional[torch.Tensor], Optional[torch.Tensor]]:
         """
         Perform an evaluation step on :obj:`model` using obj:`inputs`.
@@ -1244,64 +1122,14 @@ class Trainer:
             Tuple[Optional[torch.Tensor], Optional[torch.Tensor], Optional[torch.Tensor]]: A tuple with the loss,
             logits and labels (each being optional).
         """
-        has_labels = all(inputs.get(k) is not None for k in self.label_names)
         # inputs = self._prepare_inputs(inputs)
-        if ignore_keys is None:
-            if hasattr(self.model, "config"):
-                ignore_keys = getattr(self.model.config, "keys_to_ignore_at_inference", [])
-            else:
-                ignore_keys = []
 
-        # labels may be popped when computing the loss (label smoothing for instance) so we grab them first.
-        if has_labels:
-            labels = nested_detach(tuple(inputs.get(name) for name in self.label_names))
-            if len(labels) == 1:
-                labels = labels[0]
-        else:
-            labels = None
+        labels = inputs[1]
 
         with torch.no_grad():
-            if is_sagemaker_mp_enabled():
-                raw_outputs = smp_forward_only(model, inputs)
-                if has_labels:
-                    if isinstance(raw_outputs, dict):
-                        loss_mb = raw_outputs["loss"]
-                        logits_mb = tuple(v for k, v in raw_outputs.items() if k not in ignore_keys + ["loss"])
-                    else:
-                        loss_mb = raw_outputs[0]
-                        logits_mb = raw_outputs[1:]
-
-                    loss = loss_mb.reduce_mean().detach().cpu()
-                    logits = smp_nested_concat(logits_mb)
-                else:
-                    loss = None
-                    if isinstance(raw_outputs, dict):
-                        logits_mb = tuple(v for k, v in raw_outputs.items() if k not in ignore_keys)
-                    else:
-                        logits_mb = raw_outputs
-                    logits = smp_nested_concat(logits_mb)
-            else:
-                if has_labels:
-                    loss, outputs = self.compute_loss(model, inputs, return_outputs=True)
-                    loss = loss.mean().detach()
-                    if isinstance(outputs, dict):
-                        logits = tuple(v for k, v in outputs.items() if k not in ignore_keys + ["loss"])
-                    else:
-                        logits = outputs[1:]
-                else:
-                    loss = None
-                    if self.use_amp:
-                        with autocast():
-                            outputs = model(**inputs)
-                    else:
-                        outputs = model(**inputs)
-                    if isinstance(outputs, dict):
-                        logits = tuple(v for k, v in outputs.items() if k not in ignore_keys)
-                    else:
-                        logits = outputs
-                    # TODO: this needs to be fixed and made cleaner later.
-                    if self.args.past_index >= 0:
-                        self._past = outputs[self.args.past_index - 1]
+            loss = None
+            outputs = model(inputs[0])
+            logits = outputs
 
         if prediction_loss_only:
             return (loss, None, None)
@@ -1399,7 +1227,7 @@ class Trainer:
         self.callback_handler.eval_dataloader = dataloader
 
         for step, inputs in enumerate(dataloader):
-            loss, logits, labels = self.prediction_step(model, inputs, prediction_loss_only, ignore_keys=ignore_keys)
+            loss, logits, labels = self.prediction_step(model, inputs, prediction_loss_only)
             if loss is not None:
                 losses = loss.repeat(batch_size)
                 losses_host = losses if losses_host is None else torch.cat((losses_host, losses), dim=0)
