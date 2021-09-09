@@ -17,51 +17,33 @@ The Trainer class, to easily train a 🤗 Transformers from scratch or finetune 
 """
 
 import collections
-import inspect
 import math
 import os
 import random
-import re
-import shutil
 import sys
 import time
 import warnings
-from logging import StreamHandler
-from pathlib import Path
 from typing import TYPE_CHECKING, Any, Callable, Dict, List, Optional, Tuple, Union
-from torch import nn, optim
-
-from tqdm.auto import tqdm
-
-# Integrations must be imported before ML frameworks:
-from integrations import (  # isort: split
-    default_hp_search_backend,
-    get_reporting_integration_callbacks,
-    hp_params,
-    is_fairscale_available,
-    is_optuna_available,
-    is_ray_tune_available,
-    run_hp_search_optuna,
-    run_hp_search_ray,
-)
 
 import numpy as np
 import torch
 from packaging import version
 from torch import nn
+from torch import optim
 from torch.utils.data.dataloader import DataLoader
-from torch.utils.data.dataset import Dataset, IterableDataset
+from torch.utils.data.dataset import Dataset
 
-from configuration_utils import PretrainedConfig
-from deepspeed import deepspeed_init, is_deepspeed_zero3_enabled
+from deepspeed import deepspeed_init
 from file_utils import (
-    CONFIG_NAME,
     WEIGHTS_NAME,
     is_datasets_available,
 )
+# Integrations must be imported before ML frameworks:
+from integrations import (  # isort: split
+    get_reporting_integration_callbacks,
+)
 # from modelcard import TrainingSummary
-from modeling_utils import PreTrainedModel, unwrap_model
-from optimization import Adafactor, AdamW, get_scheduler
+from modeling_utils import PreTrainedModel
 from trainer_callback import (
     CallbackHandler,
     DefaultFlowCallback,
@@ -71,48 +53,28 @@ from trainer_callback import (
     TrainerControl,
     TrainerState,
 )
-
 from trainer_pt_utils import (
-    DistributedLengthGroupedSampler,
-    DistributedSamplerWithLoop,
     DistributedTensorGatherer,
-    IterableDatasetShard,
-    LabelSmoother,
-    LengthGroupedSampler,
     SequentialDistributedSampler,
-    ShardSampler,
     distributed_broadcast_scalars,
     distributed_concat,
-    find_batch_size,
-    get_parameter_names,
     nested_concat,
     nested_detach,
     nested_numpify,
-    nested_truncate,
-    nested_xla_mesh_reduce,
     reissue_pt_warnings,
 )
-
 from trainer_utils import (
     PREFIX_CHECKPOINT_DIR,
-    BestRun,
     EvalLoopOutput,
     EvalPrediction,
-    HPSearchBackend,
     PredictionOutput,
-    ShardedDDPOption,
     TrainerMemoryTracker,
     TrainOutput,
-    default_compute_objective,
-    default_hp_space,
     denumpify_detensorize,
-    get_last_checkpoint,
-    number_of_arguments,
     set_seed,
     speed_metrics,
 )
-
-from training_args import ParallelMode, TrainingArguments
+from training_args import TrainingArguments
 from utils import logging
 from utils.modeling_auto_mapping import MODEL_FOR_QUESTION_ANSWERING_MAPPING_NAMES
 
@@ -125,13 +87,12 @@ DEFAULT_PROGRESS_CALLBACK = ProgressCallback
 if version.parse(torch.__version__) >= version.parse("1.6"):
     _is_torch_generator_available = True
     _is_native_amp_available = True
-    from torch.cuda.amp import autocast
 
 if is_datasets_available():
-    import datasets
+    pass
 
 if TYPE_CHECKING:
-    import optuna
+    pass
 
 logger = logging.get_logger(__name__)
 
@@ -286,6 +247,7 @@ class Trainer:
             raise ValueError("train_dataset does not implement __len__, max_steps has to be specified")
 
         self.state = TrainerState()
+        # control the save condition
         self.control = TrainerControl()
         # Internal variable to count flos in each process, will be accumulated in `self.state.total_flos` then
         # returned to 0 every time flos need to be logged
@@ -555,8 +517,8 @@ class Trainer:
                     steps_trained_progress_bar.close()
                     steps_trained_progress_bar = None
 
-                if step % args.gradient_accumulation_steps == 0:
-                    self.control = self.callback_handler.on_step_begin(args, self.state, self.control)
+                # if step % args.gradient_accumulation_steps == 0:
+                #     self.control = self.callback_handler.on_step_begin(args, self.state, self.control)
 
                 if (
                         ((step + 1) % args.gradient_accumulation_steps != 0)
@@ -593,15 +555,12 @@ class Trainer:
                 if self.control.should_epoch_stop or self.control.should_training_stop:
                     break
 
+            self.control.should_save = True
             self.control = self.callback_handler.on_epoch_end(args, self.state, self.control)
             self._maybe_log_save_evaluate(tr_loss)
 
             if self.control.should_training_stop:
                 break
-
-        if args.past_index and hasattr(self, "_past"):
-            # Clean the state at the end of training
-            delattr(self, "_past")
 
         logger.info("\n\nTraining completed. Do not forget to share your model on huggingface.co/models =)\n\n")
 
@@ -963,90 +922,15 @@ class Trainer:
             #     observed_num_examples += observed_batch_size
 
             # Prediction step
-            loss, logits, labels = self.prediction_step(model, inputs, prediction_loss_only, ignore_keys=ignore_keys)
-
-            # Update containers on host
-            if loss is not None:
-                losses = self._nested_gather(loss.repeat(batch_size))
-                losses_host = losses if losses_host is None else torch.cat((losses_host, losses), dim=0)
-            if logits is not None:
-                logits = self._pad_across_processes(logits)
-                logits = self._nested_gather(logits)
-                preds_host = logits if preds_host is None else nested_concat(preds_host, logits, padding_index=-100)
-            if labels is not None:
-                labels = self._pad_across_processes(labels)
-                labels = self._nested_gather(labels)
-                labels_host = labels if labels_host is None else nested_concat(labels_host, labels, padding_index=-100)
+            # loss 直接抽出来，不要这个函数
+            loss, logits, labels = self.prediction_step(model, inputs, prediction_loss_only)
             self.control = self.callback_handler.on_prediction_step(self.args, self.state, self.control)
-
-            # Gather all tensors and put them back on the CPU if we have done enough accumulation steps.
-            if self.args.eval_accumulation_steps is not None and (step + 1) % self.args.eval_accumulation_steps == 0:
-                if losses_host is not None:
-                    losses = nested_numpify(losses_host)
-                    all_losses = losses if all_losses is None else np.concatenate((all_losses, losses), axis=0)
-                if preds_host is not None:
-                    logits = nested_numpify(preds_host)
-                    all_preds = logits if all_preds is None else nested_concat(all_preds, logits, padding_index=-100)
-                if labels_host is not None:
-                    labels = nested_numpify(labels_host)
-                    all_labels = (
-                        labels if all_labels is None else nested_concat(all_labels, labels, padding_index=-100)
-                    )
-
-                # Set back to None to begin a new accumulation
-                losses_host, preds_host, labels_host = None, None, None
 
         if self.args.past_index and hasattr(self, "_past"):
             # Clean the state at the end of the evaluation loop
             delattr(self, "_past")
 
-        # Gather all remaining tensors and put them back on the CPU
-        if losses_host is not None:
-            losses = nested_numpify(losses_host)
-            all_losses = losses if all_losses is None else np.concatenate((all_losses, losses), axis=0)
-        if preds_host is not None:
-            logits = nested_numpify(preds_host)
-            all_preds = logits if all_preds is None else nested_concat(all_preds, logits, padding_index=-100)
-        if labels_host is not None:
-            labels = nested_numpify(labels_host)
-            all_labels = labels if all_labels is None else nested_concat(all_labels, labels, padding_index=-100)
-
-        # Number of samples
-        if not isinstance(eval_dataset, IterableDataset):
-            num_samples = len(eval_dataset)
-        # The instance check is weird and does not actually check for the type, but whether the dataset has the right
-        # methods. Therefore we need to make sure it also has the attribute.
-        elif isinstance(eval_dataset, IterableDatasetShard) and hasattr(eval_dataset, "num_examples"):
-            num_samples = eval_dataset.num_examples
-        else:
-            num_samples = observed_num_examples
-
-        # Number of losses has been rounded to a multiple of batch_size and in a distributed training, the number of
-        # samplers has been rounded to a multiple of batch_size, so we truncate.
-        if all_losses is not None:
-            all_losses = all_losses[:num_samples]
-        if all_preds is not None:
-            all_preds = nested_truncate(all_preds, num_samples)
-        if all_labels is not None:
-            all_labels = nested_truncate(all_labels, num_samples)
-
-        # Metrics!
-        if self.compute_metrics is not None and all_preds is not None and all_labels is not None:
-            metrics = self.compute_metrics(EvalPrediction(predictions=all_preds, label_ids=all_labels))
-        else:
-            metrics = {}
-
-        # To be JSON-serializable, we need to remove numpy types or zero-d tensors
-        metrics = denumpify_detensorize(metrics)
-
-        if all_losses is not None:
-            metrics[f"{metric_key_prefix}_loss"] = all_losses.mean().item()
-
-        # Prefix all keys with metric_key_prefix + '_'
-        for key in list(metrics.keys()):
-            if not key.startswith(f"{metric_key_prefix}_"):
-                metrics[f"{metric_key_prefix}_{key}"] = metrics.pop(key)
-
+        num_samples = len(eval_dataset)
         return EvalLoopOutput(predictions=all_preds, label_ids=all_labels, metrics=metrics, num_samples=num_samples)
 
     def _nested_gather(self, tensors, name=None):
@@ -1127,9 +1011,10 @@ class Trainer:
         labels = inputs[1]
 
         with torch.no_grad():
-            loss = None
             outputs = model(inputs[0])
             logits = outputs
+            criterion = nn.CrossEntropyLoss()
+            loss = criterion(outputs, labels)
 
         if prediction_loss_only:
             return (loss, None, None)

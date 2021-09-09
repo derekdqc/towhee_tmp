@@ -108,6 +108,6 @@ trainer = Trainer(
     train_dataset=train_data,
     eval_dataset=eval_data
 )
-# trainer.train()
-trainer.evaluate()
+trainer.train()
+# trainer.evaluate()
 # trainer.predict()
