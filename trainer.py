@@ -33,17 +33,6 @@ from torch import optim
 from torch.utils.data.dataloader import DataLoader
 from torch.utils.data.dataset import Dataset
 
-from deepspeed import deepspeed_init
-from file_utils import (
-    WEIGHTS_NAME,
-    is_datasets_available,
-)
-# Integrations must be imported before ML frameworks:
-from integrations import (  # isort: split
-    get_reporting_integration_callbacks,
-)
-# from modelcard import TrainingSummary
-from modeling_utils import PreTrainedModel
 from trainer_callback import (
     CallbackHandler,
     DefaultFlowCallback,
@@ -54,7 +43,6 @@ from trainer_callback import (
     TrainerState,
 )
 from trainer_pt_utils import (
-    DistributedTensorGatherer,
     SequentialDistributedSampler,
     distributed_broadcast_scalars,
     distributed_concat,
@@ -68,11 +56,9 @@ from trainer_utils import (
     EvalLoopOutput,
     EvalPrediction,
     PredictionOutput,
-    TrainerMemoryTracker,
     TrainOutput,
     denumpify_detensorize,
     set_seed,
-    speed_metrics,
 )
 from training_args import TrainingArguments
 from utils import logging
@@ -88,13 +74,9 @@ if version.parse(torch.__version__) >= version.parse("1.6"):
     _is_torch_generator_available = True
     _is_native_amp_available = True
 
-if is_datasets_available():
-    pass
-
-if TYPE_CHECKING:
-    pass
-
 logger = logging.get_logger(__name__)
+
+WEIGHTS_NAME = "pytorch_model.bin"
 
 
 class Trainer:
@@ -172,15 +154,13 @@ class Trainer:
 
     """
 
-    from trainer_pt_utils import _get_learning_rate
-
     def __init__(
             self,
-            model: Union[PreTrainedModel, nn.Module] = None,
+            model: nn.Module = None,
             args: TrainingArguments = None,
             train_dataset: Optional[Dataset] = None,
             eval_dataset: Optional[Dataset] = None,
-            model_init: Callable[[], PreTrainedModel] = None,
+            model_init: Callable[[], nn.Module] = None,
             compute_metrics: Optional[Callable[[EvalPrediction], Dict]] = None,
             callbacks: Optional[List[TrainerCallback]] = None,
             optimizers: Tuple[torch.optim.Optimizer, torch.optim.lr_scheduler.LambdaLR] = (None, None),
@@ -193,17 +173,6 @@ class Trainer:
         # Seed must be set before instantiating the model when using model
         set_seed(self.args.seed)
         self.is_in_train = False
-
-        # memory metrics - must set up as early as possible
-        self._memory_tracker = TrainerMemoryTracker(self.args.skip_memory_metrics)
-        self._memory_tracker.start()
-
-        # set the correct log level depending on the node
-        log_level = args.get_process_log_level()
-        logging.set_verbosity(log_level)
-
-        # force device and distributed setup init explicitly
-        args._setup_devices
 
         if model is None:
             raise RuntimeError("`Trainer` requires either a `model` or `model_init` argument")
@@ -227,7 +196,7 @@ class Trainer:
                 "Passing a `model_init` is incompatible with providing the `optimizers` argument."
                 "You should subclass `Trainer` and override the `create_optimizer_and_scheduler` method."
             )
-        default_callbacks = DEFAULT_CALLBACKS + get_reporting_integration_callbacks(self.args.report_to)
+        default_callbacks = DEFAULT_CALLBACKS
         callbacks = default_callbacks if callbacks is None else default_callbacks + callbacks
         self.callback_handler = CallbackHandler(
             callbacks, self.model, self.optimizer, self.lr_scheduler
@@ -237,8 +206,7 @@ class Trainer:
         # Will be set to True by `self._setup_loggers()` on first call to `self.log()`.
         self._loggers_initialized = False
 
-        if self.args.should_save:
-            os.makedirs(self.args.output_dir, exist_ok=True)
+        os.makedirs(self.args.output_dir, exist_ok=True)
 
         if args.max_steps > 0:
             logger.info("max_steps is given, it will override any value given in num_train_epochs")
@@ -259,9 +227,6 @@ class Trainer:
         )
         self.label_names = default_label_names if self.args.label_names is None else self.args.label_names
         self.control = self.callback_handler.on_init_end(self.args, self.state, self.control)
-
-        # very last
-        self._memory_tracker.stop_and_update_metrics()
 
     def add_callback(self, callback):
         """
@@ -318,9 +283,6 @@ class Trainer:
         return DataLoader(
             train_dataset,
             batch_size=self.args.train_batch_size,
-            drop_last=self.args.dataloader_drop_last,
-            num_workers=self.args.dataloader_num_workers,
-            pin_memory=self.args.dataloader_pin_memory,
         )
 
     def get_eval_dataloader(self, eval_dataset: Optional[Dataset] = None) -> DataLoader:
@@ -406,9 +368,6 @@ class Trainer:
         Main training entry point.
         """
 
-        # memory metrics - must set up as early as possible
-        self._memory_tracker.start()
-
         args = self.args
 
         self.is_in_train = True
@@ -423,7 +382,7 @@ class Trainer:
         # number of training epochs: num_train_epochs
         # number of training steps per epoch: num_update_steps_per_epoch
         # total number of training steps to execute: max_steps
-        total_train_batch_size = args.train_batch_size * args.gradient_accumulation_steps * args.world_size
+        total_train_batch_size = args.train_batch_size * args.gradient_accumulation_steps
         if train_dataset_is_sized:
             num_update_steps_per_epoch = len(train_dataloader) // args.gradient_accumulation_steps
             num_update_steps_per_epoch = max(num_update_steps_per_epoch, 1)
@@ -461,7 +420,6 @@ class Trainer:
         logger.info("***** Running training *****")
         logger.info(f"  Num examples = {num_examples}")
         logger.info(f"  Num Epochs = {num_train_epochs}")
-        logger.info(f"  Instantaneous batch size per device = {args.per_device_train_batch_size}")
         logger.info(f"  Total train batch size (w. parallel, distributed & accumulation) = {total_train_batch_size}")
         logger.info(f"  Gradient Accumulation steps = {args.gradient_accumulation_steps}")
         logger.info(f"  Total optimization steps = {max_steps}")
@@ -483,7 +441,7 @@ class Trainer:
         self.state.num_train_epochs = num_train_epochs
 
         # tr_loss is a tensor to avoid synchronization of TPUs through .item()
-        tr_loss = torch.tensor(0.0).to(args.device)
+        tr_loss = torch.tensor(0.0)
         # _total_loss_scalar is updated everytime .item() has to be called on tr_loss and stores the sum of all losses
         self._total_loss_scalar = 0.0
         self._globalstep_last_logged = self.state.global_step
@@ -492,11 +450,6 @@ class Trainer:
         self.control = self.callback_handler.on_train_begin(args, self.state, self.control)
 
         # Skip the first epochs_trained epochs to get the random state of the dataloader at the right point.
-        if not args.ignore_data_skip:
-            for epoch in range(epochs_trained):
-                # We just need to begin an iteration to create the randomization of the sampler.
-                for _ in train_dataloader:
-                    break
 
         for epoch in range(epochs_trained, num_train_epochs):
             epoch_iterator = train_dataloader
@@ -568,20 +521,13 @@ class Trainer:
         self._total_loss_scalar += tr_loss.item()
         train_loss = self._total_loss_scalar / self.state.global_step
 
-        metrics = speed_metrics("train", start_time, num_samples=num_train_samples, num_steps=self.state.max_steps)
         self.store_flos()
-        metrics["total_flos"] = self.state.total_flos
-        metrics["train_loss"] = train_loss
 
         self.is_in_train = False
 
-        self._memory_tracker.stop_and_update_metrics(metrics)
-
-        self.log(metrics)
-
         self.control = self.callback_handler.on_train_end(args, self.state, self.control)
 
-        return TrainOutput(self.state.global_step, train_loss, metrics)
+        return TrainOutput(self.state.global_step, train_loss)
 
     def _maybe_log_save_evaluate(self, tr_loss):
         if self.control.should_log:
@@ -590,8 +536,8 @@ class Trainer:
             # reset tr_loss to zero
             tr_loss -= tr_loss
 
-            logs["loss"] = round(tr_loss_scalar / (self.state.global_step - self._globalstep_last_logged), 4)
-            logs["learning_rate"] = self._get_learning_rate()
+            # logs["loss"] = round(tr_loss_scalar / (self.state.global_step - self._globalstep_last_logged), 4)
+            logs["loss"] = tr_loss_scalar
 
             self._total_loss_scalar += tr_loss_scalar
             self._globalstep_last_logged = self.state.global_step
@@ -719,8 +665,9 @@ class Trainer:
         if output_dir is None:
             output_dir = self.args.output_dir
 
+        state_dict = self.model.state_dict()
         if self.args.should_save:
-            self._save(output_dir)
+            self._save(output_dir, state_dict)
 
     def _save(self, output_dir: Optional[str] = None, state_dict=None):
         # If we are executing this function, we are the process zero, so we don't check for that.
@@ -729,25 +676,14 @@ class Trainer:
         logger.info(f"Saving model checkpoint to {output_dir}")
         # Save a trained model and configuration using `save_pretrained()`.
         # They can then be reloaded using `from_pretrained()`
-        if not isinstance(self.model, PreTrainedModel):
-            logger.info("Trainer.model is not a `PreTrainedModel`, only saving its state dict.")
-            if state_dict is None:
-                state_dict = self.model.state_dict()
-            torch.save(state_dict, os.path.join(output_dir, WEIGHTS_NAME))
-        else:
-            self.model.save_pretrained(output_dir, state_dict=state_dict)
+        torch.save(state_dict, os.path.join(output_dir, WEIGHTS_NAME))
 
         # Good practice: save your training arguments together with the trained model
         torch.save(self.args, os.path.join(output_dir, "training_args.bin"))
 
     def store_flos(self):
-        # Storing the number of floating-point operations that went into the model
-        if self.args.local_rank != -1:
-            self.state.total_flos += distributed_broadcast_scalars([self.current_flos]).sum().item()
-            self.current_flos = 0
-        else:
-            self.state.total_flos += self.current_flos
-            self.current_flos = 0
+        self.state.total_flos += self.current_flos
+        self.current_flos = 0
 
     def evaluate(
             self,
