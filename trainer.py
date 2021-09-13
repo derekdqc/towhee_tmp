@@ -149,8 +149,6 @@ class Trainer:
         - **place_model_on_device** -- Whether or not to automatically place the model on the device - it will be set
           to :obj:`False` if model parallel or deepspeed is used, or if the default
           ``TrainingArguments.place_model_on_device`` is overridden to return :obj:`False` .
-        - **is_in_train** -- Whether or not a model is currently running ``train`` (e.g. when ``evaluate`` is called
-          while in ``train``)
 
     """
 
@@ -172,7 +170,6 @@ class Trainer:
         self.args = args
         # Seed must be set before instantiating the model when using model
         set_seed(self.args.seed)
-        self.is_in_train = False
 
         if model is None:
             raise RuntimeError("`Trainer` requires either a `model` or `model_init` argument")
@@ -367,10 +364,7 @@ class Trainer:
         """
         Main training entry point.
         """
-
         args = self.args
-
-        self.is_in_train = True
 
         # Keeping track whether we can can len() on the dataset or not
         train_dataset_is_sized = isinstance(self.train_dataset, collections.abc.Sized)
@@ -382,29 +376,22 @@ class Trainer:
         # number of training epochs: num_train_epochs
         # number of training steps per epoch: num_update_steps_per_epoch
         # total number of training steps to execute: max_steps
-        total_train_batch_size = args.train_batch_size * args.gradient_accumulation_steps
+        total_train_batch_size = args.train_batch_size
         if train_dataset_is_sized:
-            num_update_steps_per_epoch = len(train_dataloader) // args.gradient_accumulation_steps
+            num_update_steps_per_epoch = len(train_dataloader)
             num_update_steps_per_epoch = max(num_update_steps_per_epoch, 1)
             if args.max_steps > 0:
                 max_steps = args.max_steps
                 num_train_epochs = args.max_steps // num_update_steps_per_epoch + int(
                     args.max_steps % num_update_steps_per_epoch > 0
                 )
-                # May be slightly incorrect if the last batch in the training datalaoder has a smaller size but it's
-                # the best we can do.
-                num_train_samples = args.max_steps * total_train_batch_size
             else:
                 max_steps = math.ceil(args.num_train_epochs * num_update_steps_per_epoch)
                 num_train_epochs = math.ceil(args.num_train_epochs)
-                num_train_samples = len(self.train_dataset) * args.num_train_epochs
         else:
-            # see __init__. max_steps is set when the dataset has no __len__
             max_steps = args.max_steps
             # Setting a very large number of epochs so we go as many times as necessary over the iterator.
             num_train_epochs = sys.maxsize
-            num_update_steps_per_epoch = max_steps
-            num_train_samples = args.max_steps * total_train_batch_size
 
         self.create_optimizer_and_scheduler(num_training_steps=max_steps)
 
@@ -421,14 +408,10 @@ class Trainer:
         logger.info(f"  Num examples = {num_examples}")
         logger.info(f"  Num Epochs = {num_train_epochs}")
         logger.info(f"  Total train batch size (w. parallel, distributed & accumulation) = {total_train_batch_size}")
-        logger.info(f"  Gradient Accumulation steps = {args.gradient_accumulation_steps}")
         logger.info(f"  Total optimization steps = {max_steps}")
 
         self.state.epoch = 0
-        start_time = time.time()
         epochs_trained = 0
-        steps_trained_in_current_epoch = 0
-        steps_trained_progress_bar = None
 
         # Update the references
         self.callback_handler.model = self.model
@@ -440,73 +423,38 @@ class Trainer:
         self.state.max_steps = max_steps
         self.state.num_train_epochs = num_train_epochs
 
-        # tr_loss is a tensor to avoid synchronization of TPUs through .item()
         tr_loss = torch.tensor(0.0)
         # _total_loss_scalar is updated everytime .item() has to be called on tr_loss and stores the sum of all losses
         self._total_loss_scalar = 0.0
-        self._globalstep_last_logged = self.state.global_step
         model.zero_grad()
 
         self.control = self.callback_handler.on_train_begin(args, self.state, self.control)
-
-        # Skip the first epochs_trained epochs to get the random state of the dataloader at the right point.
 
         for epoch in range(epochs_trained, num_train_epochs):
             epoch_iterator = train_dataloader
 
             steps_in_epoch = (
-                len(epoch_iterator) if train_dataset_is_sized else args.max_steps * args.gradient_accumulation_steps
+                len(epoch_iterator) if train_dataset_is_sized else args.max_steps
             )
             self.control = self.callback_handler.on_epoch_begin(args, self.state, self.control)
 
             for step, inputs in enumerate(epoch_iterator):
-                # Skip past any already trained steps if resuming training
-                if steps_trained_in_current_epoch > 0:
-                    steps_trained_in_current_epoch -= 1
-                    if steps_trained_progress_bar is not None:
-                        steps_trained_progress_bar.update(1)
-                    continue
-                elif steps_trained_progress_bar is not None:
-                    steps_trained_progress_bar.close()
-                    steps_trained_progress_bar = None
-
-                # if step % args.gradient_accumulation_steps == 0:
-                #     self.control = self.callback_handler.on_step_begin(args, self.state, self.control)
-
-                if (
-                        ((step + 1) % args.gradient_accumulation_steps != 0)
-                        and args.local_rank != -1
-                        and args._no_sync_in_gradient_accumulation
-                ):
-                    # Avoid unnecessary DDP synchronization since there will be no backward pass on this example.
-                    with model.no_sync():
-                        tr_loss += self.training_step(model, inputs)
-                else:
-                    tr_loss += self.training_step(model, inputs)
+                tr_loss += self.training_step(model, inputs)
                 self.current_flos += float(self.floating_point_ops(inputs))
 
-                if (step + 1) % args.gradient_accumulation_steps == 0 or (
-                        # last step in epoch but step is always smaller than gradient_accumulation_steps
-                        steps_in_epoch <= args.gradient_accumulation_steps
-                        and (step + 1) == steps_in_epoch
-                ):
+                # Optimizer step
+                optimizer_was_run = True
+                self.optimizer.step()
 
-                    # Optimizer step
-                    optimizer_was_run = True
-                    self.optimizer.step()
+                if optimizer_was_run:
+                    self.lr_scheduler.step()
 
-                    if optimizer_was_run:
-                        self.lr_scheduler.step()
+                model.zero_grad()
+                self.state.global_step += 1
+                self.state.epoch = epoch + (step + 1) / steps_in_epoch
+                self.control = self.callback_handler.on_step_end(args, self.state, self.control)
 
-                    model.zero_grad()
-                    self.state.global_step += 1
-                    self.state.epoch = epoch + (step + 1) / steps_in_epoch
-                    self.control = self.callback_handler.on_step_end(args, self.state, self.control)
-
-                    self._maybe_log_save_evaluate(tr_loss)
-
-                if self.control.should_epoch_stop or self.control.should_training_stop:
-                    break
+                self._maybe_log_save_evaluate(tr_loss)
 
             self.control.should_save = True
             self.control = self.callback_handler.on_epoch_end(args, self.state, self.control)
@@ -520,10 +468,6 @@ class Trainer:
         # add remaining tr_loss
         self._total_loss_scalar += tr_loss.item()
         train_loss = self._total_loss_scalar / self.state.global_step
-
-        self.store_flos()
-
-        self.is_in_train = False
 
         self.control = self.callback_handler.on_train_end(args, self.state, self.control)
 
@@ -540,7 +484,6 @@ class Trainer:
             logs["loss"] = tr_loss_scalar
 
             self._total_loss_scalar += tr_loss_scalar
-            self._globalstep_last_logged = self.state.global_step
             self.store_flos()
 
             self.log(logs)
@@ -869,50 +812,6 @@ class Trainer:
         num_samples = len(eval_dataset)
         return EvalLoopOutput(predictions=all_preds, label_ids=all_labels, metrics=metrics, num_samples=num_samples)
 
-    def _nested_gather(self, tensors, name=None):
-        """
-        Gather value of `tensors` (tensor or list/tuple of nested tensors) and convert them to numpy before
-        concatenating them to `gathered`
-        """
-        if tensors is None:
-            return
-        if self.args.local_rank != -1:
-            tensors = distributed_concat(tensors)
-        return tensors
-
-    # Copied from Accelerate.
-    def _pad_across_processes(self, tensor, pad_index=-100):
-        """
-        Recursively pad the tensors in a nested list/tuple/dictionary of tensors from all devices to the same size so
-        they can safely be gathered.
-        """
-        if isinstance(tensor, (list, tuple)):
-            return type(tensor)(self._pad_across_processes(t, pad_index=pad_index) for t in tensor)
-        elif isinstance(tensor, dict):
-            return type(tensor)({k: self._pad_across_processes(v, pad_index=pad_index) for k, v in tensor.items()})
-        elif not isinstance(tensor, torch.Tensor):
-            raise TypeError(
-                f"Can't pad the values of type {type(tensor)}, only of nested list/tuple/dicts of tensors."
-            )
-
-        if len(tensor.shape) < 2:
-            return tensor
-        # Gather all sizes
-        size = torch.tensor(tensor.shape, device=tensor.device)[None]
-        sizes = self._nested_gather(size).cpu()
-
-        max_size = max(s[1] for s in sizes)
-        if tensor.shape[1] == max_size:
-            return tensor
-
-        # Then pad to the maximum size
-        old_size = tensor.shape
-        new_size = list(old_size)
-        new_size[1] = max_size
-        new_tensor = tensor.new_zeros(tuple(new_size)) + pad_index
-        new_tensor[:, : old_size[1]] = tensor
-        return new_tensor
-
     def prediction_step(
             self,
             model: nn.Module,
@@ -998,26 +897,7 @@ class Trainer:
             prediction_loss_only if prediction_loss_only is not None else self.args.prediction_loss_only
         )
 
-        # if eval is called w/o train init deepspeed here
-        if self.args.deepspeed and not self.deepspeed:
-            # XXX: eval doesn't have `resume_from_checkpoint` arg but we should be able to do eval
-            # from the checkpoint eventually
-            deepspeed_engine, _, _ = deepspeed_init(self, num_training_steps=0, resume_from_checkpoint=None)
-            self.model = deepspeed_engine.module
-            self.model_wrapped = deepspeed_engine
-            self.deepspeed = deepspeed_engine
-            # XXX: we don't need optim/sched for inference, but this needs to be sorted out, since
-            # for example the Z3-optimizer is a must for zero3 to work even for inference - what we
-            # don't need is the deepspeed basic optimizer which is self.optimizer.optimizer
-            deepspeed_engine.optimizer.optimizer = None
-            deepspeed_engine.lr_scheduler = None
-
         model = self._wrap_model(self.model, training=False)
-
-        # if full fp16 is wanted on eval and this ``evaluation`` or ``predict`` isn't called while
-        # ``train`` is running, halve it first and then put on device
-        if not self.is_in_train and self.args.fp16_full_eval:
-            model = model.half().to(self.args.device)
 
         batch_size = dataloader.batch_size
         num_examples = self.num_examples(dataloader)
@@ -1099,15 +979,3 @@ class Trainer:
                 metrics[f"{metric_key_prefix}_{key}"] = metrics.pop(key)
 
         return PredictionOutput(predictions=preds, label_ids=label_ids, metrics=metrics)
-
-    def _gather_and_numpify(self, tensors, name):
-        """
-        Gather value of `tensors` (tensor or list/tuple of nested tensors) and convert them to numpy before
-        concatenating them to `gathered`
-        """
-        if tensors is None:
-            return
-        if self.args.local_rank != -1:
-            tensors = distributed_concat(tensors)
-
-        return nested_numpify(tensors)

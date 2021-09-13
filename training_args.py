@@ -355,10 +355,10 @@ class TrainingArguments:
         },
     )
 
-    gradient_accumulation_steps: int = field(
-        default=1,
-        metadata={"help": "Number of updates steps to accumulate before performing a backward/update pass."},
-    )
+    # gradient_accumulation_steps: int = field(
+    #     default=1,
+    #     metadata={"help": "Number of updates steps to accumulate before performing a backward/update pass."},
+    # )
     eval_accumulation_steps: Optional[int] = field(
         default=None,
         metadata={"help": "Number of predictions steps to accumulate before moving the tensors to the CPU."},
