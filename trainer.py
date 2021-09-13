@@ -23,7 +23,7 @@ import random
 import sys
 import time
 import warnings
-from typing import TYPE_CHECKING, Any, Callable, Dict, List, Optional, Tuple, Union
+from typing import Any, Dict, List, Optional, Tuple, Union
 
 import numpy as np
 import torch
@@ -44,11 +44,8 @@ from trainer_callback import (
 )
 from trainer_pt_utils import (
     SequentialDistributedSampler,
-    distributed_broadcast_scalars,
-    distributed_concat,
     nested_concat,
     nested_detach,
-    nested_numpify,
     reissue_pt_warnings,
 )
 from trainer_utils import (
@@ -158,8 +155,6 @@ class Trainer:
             args: TrainingArguments = None,
             train_dataset: Optional[Dataset] = None,
             eval_dataset: Optional[Dataset] = None,
-            model_init: Callable[[], nn.Module] = None,
-            compute_metrics: Optional[Callable[[EvalPrediction], Dict]] = None,
             callbacks: Optional[List[TrainerCallback]] = None,
             optimizers: Tuple[torch.optim.Optimizer, torch.optim.lr_scheduler.LambdaLR] = (None, None),
     ):
@@ -173,35 +168,18 @@ class Trainer:
 
         if model is None:
             raise RuntimeError("`Trainer` requires either a `model` or `model_init` argument")
-        else:
-            if model_init is not None:
-                warnings.warn(
-                    "`Trainer` requires either a `model` or `model_init` argument, but not both. "
-                    "`model_init` will overwrite your model when calling the `train` method. This will become a fatal error in the next release.",
-                    FutureWarning,
-                )
-            self.model_init = model_init
 
         self.train_dataset = train_dataset
         self.eval_dataset = eval_dataset
         self.model = model
 
-        self.compute_metrics = compute_metrics
         self.optimizer, self.lr_scheduler = optimizers
-        if model_init is not None and (self.optimizer is not None or self.lr_scheduler is not None):
-            raise RuntimeError(
-                "Passing a `model_init` is incompatible with providing the `optimizers` argument."
-                "You should subclass `Trainer` and override the `create_optimizer_and_scheduler` method."
-            )
         default_callbacks = DEFAULT_CALLBACKS
         callbacks = default_callbacks if callbacks is None else default_callbacks + callbacks
         self.callback_handler = CallbackHandler(
             callbacks, self.model, self.optimizer, self.lr_scheduler
         )
         self.add_callback(PrinterCallback if self.args.disable_tqdm else DEFAULT_PROGRESS_CALLBACK)
-
-        # Will be set to True by `self._setup_loggers()` on first call to `self.log()`.
-        self._loggers_initialized = False
 
         os.makedirs(self.args.output_dir, exist_ok=True)
 
@@ -235,33 +213,6 @@ class Trainer:
                In the first case, will instantiate a member of that class.
         """
         self.callback_handler.add_callback(callback)
-
-    def pop_callback(self, callback):
-        """
-        Remove a callback from the current list of :class:`~transformer.TrainerCallback` and returns it.
-
-        If the callback is not found, returns :obj:`None` (and no error is raised).
-
-        Args:
-           callback (:obj:`type` or :class:`~transformer.TrainerCallback`):
-               A :class:`~transformer.TrainerCallback` class or an instance of a :class:`~transformer.TrainerCallback`.
-               In the first case, will pop the first member of that class found in the list of callbacks.
-
-        Returns:
-            :class:`~transformer.TrainerCallback`: The callback removed, if found.
-        """
-        return self.callback_handler.pop_callback(callback)
-
-    def remove_callback(self, callback):
-        """
-        Remove a callback from the current list of :class:`~transformer.TrainerCallback`.
-
-        Args:
-           callback (:obj:`type` or :class:`~transformer.TrainerCallback`):
-               A :class:`~transformer.TrainerCallback` class or an instance of a :class:`~transformer.TrainerCallback`.
-               In the first case, will remove the first member of that class found in the list of callbacks.
-        """
-        self.callback_handler.remove_callback(callback)
 
     def get_train_dataloader(self) -> DataLoader:
         """
