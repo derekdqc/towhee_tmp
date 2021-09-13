@@ -300,9 +300,6 @@ class Trainer:
         return DataLoader(
             eval_dataset,
             batch_size=self.args.eval_batch_size,
-            drop_last=self.args.dataloader_drop_last,
-            num_workers=self.args.dataloader_num_workers,
-            pin_memory=self.args.dataloader_pin_memory,
         )
 
     def get_test_dataloader(self, test_dataset: Dataset) -> DataLoader:
@@ -456,9 +453,9 @@ class Trainer:
 
                 self._maybe_log_save_evaluate(tr_loss)
 
-            self.control.should_save = True
+            # self.control.should_save = True
             self.control = self.callback_handler.on_epoch_end(args, self.state, self.control)
-            self._maybe_log_save_evaluate(tr_loss)
+            # self._maybe_log_save_evaluate(tr_loss)
 
             if self.control.should_training_stop:
                 break
@@ -484,8 +481,6 @@ class Trainer:
             logs["loss"] = tr_loss_scalar
 
             self._total_loss_scalar += tr_loss_scalar
-            self.store_flos()
-
             self.log(logs)
 
         metrics = None
@@ -498,7 +493,6 @@ class Trainer:
         checkpoint_folder = f"{PREFIX_CHECKPOINT_DIR}-{self.state.global_step}"
 
         run_dir = self.args.output_dir
-        self.store_flos()
 
         output_dir = os.path.join(run_dir, checkpoint_folder)
         self.save_model(output_dir)
@@ -623,10 +617,6 @@ class Trainer:
 
         # Good practice: save your training arguments together with the trained model
         torch.save(self.args, os.path.join(output_dir, "training_args.bin"))
-
-    def store_flos(self):
-        self.state.total_flos += self.current_flos
-        self.current_flos = 0
 
     def evaluate(
             self,
