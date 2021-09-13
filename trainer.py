@@ -163,8 +163,6 @@ class Trainer:
             logger.info(f"No `TrainingArguments` passed, using `output_dir={output_dir}`.")
             args = TrainingArguments(output_dir=output_dir)
         self.args = args
-        # Seed must be set before instantiating the model when using model
-        set_seed(self.args.seed)
 
         if model is None:
             raise RuntimeError("`Trainer` requires either a `model` or `model_init` argument")
@@ -184,7 +182,7 @@ class Trainer:
         os.makedirs(self.args.output_dir, exist_ok=True)
 
         if args.max_steps > 0:
-            logger.info("max_steps is given, it will override any value given in num_train_epochs")
+            logger.info("max_steps is given.")
 
         if train_dataset is not None and not isinstance(train_dataset, collections.abc.Sized) and args.max_steps <= 0:
             raise ValueError("train_dataset does not implement __len__, max_steps has to be specified")
@@ -402,11 +400,11 @@ class Trainer:
                 self.state.epoch = epoch + (step + 1) / steps_in_epoch
                 self.control = self.callback_handler.on_step_end(args, self.state, self.control)
 
-                self._maybe_log_save_evaluate(tr_loss)
+                # self._maybe_log_save_evaluate(tr_loss)
 
-            # self.control.should_save = True
+            self.control.should_save = True
             self.control = self.callback_handler.on_epoch_end(args, self.state, self.control)
-            # self._maybe_log_save_evaluate(tr_loss)
+            self._maybe_log_save_evaluate(tr_loss)
 
             if self.control.should_training_stop:
                 break
@@ -527,10 +525,6 @@ class Trainer:
         """
         labels = inputs[1]
         outputs = model(inputs[0])
-        # Save past state if it exists
-        # TODO: this needs to be fixed and made cleaner later.
-        if self.args.past_index >= 0:
-            self._past = outputs[self.args.past_index]
 
         if labels is not None:
             # loss = self.label_smoother(outputs, labels)

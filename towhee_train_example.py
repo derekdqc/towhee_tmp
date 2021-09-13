@@ -97,7 +97,7 @@ model = torchvision.models.resnet50(pretrained=True)
 training_args = TrainingArguments(
     output_dir="./ResNet50",
     overwrite_output_dir=True,
-    num_train_epochs=1,
+    num_train_epochs=5,
     per_gpu_train_batch_size=4,
     prediction_loss_only=True,
 )

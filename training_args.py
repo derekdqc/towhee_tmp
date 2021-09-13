@@ -12,22 +12,20 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-import contextlib
 import json
 import os
-import warnings
 from dataclasses import asdict, dataclass, field
 from enum import Enum
-from pathlib import Path
 from typing import Any, Dict, List, Optional
 
-from utils import logging
-
 import torch
+
+from utils import logging
 
 logger = logging.get_logger(__name__)
 log_levels = logging.get_log_levels_dict().copy()
 trainer_log_levels = dict(**log_levels, passive=-1)
+
 
 def default_logdir() -> str:
     """
@@ -332,131 +330,63 @@ class TrainingArguments:
         },
     )
 
-    do_train: bool = field(default=False, metadata={"help": "Whether to run training."})
-    do_eval: bool = field(default=False, metadata={"help": "Whether to run eval on the dev set."})
-    do_predict: bool = field(default=False, metadata={"help": "Whether to run predictions on the test set."})
     prediction_loss_only: bool = field(
         default=False,
         metadata={"help": "When performing evaluation and predictions, only returns the loss."},
-    )
-
-    per_gpu_train_batch_size: Optional[int] = field(
-        default=None,
-        metadata={
-            "help": "Deprecated, the use of `--per_device_train_batch_size` is preferred. "
-            "Batch size per GPU/TPU core/CPU for training."
-        },
-    )
-    per_gpu_eval_batch_size: Optional[int] = field(
-        default=None,
-        metadata={
-            "help": "Deprecated, the use of `--per_device_eval_batch_size` is preferred."
-            "Batch size per GPU/TPU core/CPU for evaluation."
-        },
     )
 
     # gradient_accumulation_steps: int = field(
     #     default=1,
     #     metadata={"help": "Number of updates steps to accumulate before performing a backward/update pass."},
     # )
+
+    per_gpu_train_batch_size: Optional[int] = field(
+        default=None,
+        metadata={
+            "help": "Deprecated, the use of `--per_device_train_batch_size` is preferred. "
+                    "Batch size per GPU/TPU core/CPU for training."
+        },
+    )
+    per_gpu_eval_batch_size: Optional[int] = field(
+        default=None,
+        metadata={
+            "help": "Deprecated, the use of `--per_device_eval_batch_size` is preferred."
+                    "Batch size per GPU/TPU core/CPU for evaluation."
+        },
+    )
+
     eval_accumulation_steps: Optional[int] = field(
         default=None,
         metadata={"help": "Number of predictions steps to accumulate before moving the tensors to the CPU."},
     )
-
-    learning_rate: float = field(default=5e-5, metadata={"help": "The initial learning rate for AdamW."})
-    weight_decay: float = field(default=0.0, metadata={"help": "Weight decay for AdamW if we apply some."})
-    adam_beta1: float = field(default=0.9, metadata={"help": "Beta1 for AdamW optimizer"})
-    adam_beta2: float = field(default=0.999, metadata={"help": "Beta2 for AdamW optimizer"})
-    adam_epsilon: float = field(default=1e-8, metadata={"help": "Epsilon for AdamW optimizer."})
-    max_grad_norm: float = field(default=1.0, metadata={"help": "Max gradient norm."})
 
     num_train_epochs: float = field(default=3.0, metadata={"help": "Total number of training epochs to perform."})
     max_steps: int = field(
         default=-1,
         metadata={"help": "If > 0: set total number of training steps to perform. Override num_train_epochs."},
     )
-    warmup_ratio: float = field(
-        default=0.0, metadata={"help": "Linear warmup over warmup_ratio fraction of total steps."}
-    )
-    warmup_steps: int = field(default=0, metadata={"help": "Linear warmup over warmup_steps."})
 
-    seed: int = field(default=42, metadata={"help": "Random seed that will be set at the beginning of training."})
-
-    dataloader_drop_last: bool = field(
-        default=False, metadata={"help": "Drop the last incomplete batch if it is not divisible by the batch size."}
-    )
     eval_steps: int = field(default=None, metadata={"help": "Run an evaluation every X steps."})
 
-    past_index: int = field(
-        default=-1,
-        metadata={"help": "If >=0, uses the corresponding part of the output as the past state for next step."},
-    )
-
-    run_name: Optional[str] = field(
-        default=None, metadata={"help": "An optional descriptor for the run. Notably used for wandb logging."}
-    )
     disable_tqdm: Optional[bool] = field(
         default=None, metadata={"help": "Whether or not to disable the tqdm progress bars."}
     )
 
-    remove_unused_columns: Optional[bool] = field(
-        default=True, metadata={"help": "Remove columns not required by the model when using an nlp.Dataset."}
-    )
     label_names: Optional[List[str]] = field(
         default=None, metadata={"help": "The list of keys in your dictionary of inputs that correspond to the labels."}
     )
 
-    load_best_model_at_end: Optional[bool] = field(
-        default=False,
-        metadata={"help": "Whether or not to load the best model found during training at the end of training."},
-    )
-    metric_for_best_model: Optional[str] = field(
-        default=None, metadata={"help": "The metric to use to compare two different models."}
-    )
-    greater_is_better: Optional[bool] = field(
-        default=None, metadata={"help": "Whether the `metric_for_best_model` should be maximized or not."}
-    )
     _n_gpu: int = field(init=False, repr=False, default=-1)
     no_cuda: bool = field(default=False, metadata={"help": "Do not use CUDA even when it is available"})
 
     def __post_init__(self):
-        # Handle --use_env option in torch.distributed.launch (local_rank not passed as an arg then).
-        # This needs to happen before any call to self.device or self.n_gpu.
-        env_local_rank = int(os.environ.get("LOCAL_RANK", -1))
-        if env_local_rank != -1 and env_local_rank != self.local_rank:
-            self.local_rank = env_local_rank
-
-        # expand paths, if not os.makedirs("~/bar") will make directory
-        # in the current directory instead of the actual home
-        #  see https://github.com/huggingface/transformers/issues/10628
         if self.output_dir is not None:
             self.output_dir = os.path.expanduser(self.output_dir)
 
         if self.disable_tqdm is None:
             self.disable_tqdm = logger.getEffectiveLevel() > logging.WARN
 
-        if self.load_best_model_at_end and self.metric_for_best_model is None:
-            self.metric_for_best_model = "loss"
-        if self.greater_is_better is None and self.metric_for_best_model is not None:
-            self.greater_is_better = self.metric_for_best_model not in ["loss", "eval_loss"]
-        if self.run_name is None:
-            self.run_name = self.output_dir
-
         self.should_save = True
-
-    def __str__(self):
-        self_as_dict = asdict(self)
-
-        # Remove deprecated arguments. That code should be removed once
-        # those deprecated arguments are removed from TrainingArguments. (TODO: v5)
-        del self_as_dict["per_gpu_train_batch_size"]
-        del self_as_dict["per_gpu_eval_batch_size"]
-
-        attrs_as_str = [f"{k}={v},\n" for k, v in sorted(self_as_dict.items())]
-        return f"{self.__class__.__name__}(\n{''.join(attrs_as_str)})"
-
-    __repr__ = __str__
 
     @property
     def train_batch_size(self) -> int:
@@ -505,8 +435,6 @@ class TrainingArguments:
 
         return device
 
-
-
     def to_dict(self):
         """
         Serializes this instance while replace `Enum` by their values (for JSON serialization support).
@@ -533,8 +461,7 @@ class TrainingArguments:
         d = {**d, **{"train_batch_size": self.train_batch_size, "eval_batch_size": self.eval_batch_size}}
 
         valid_types = [bool, int, float, str]
-        if is_torch_available():
-            valid_types.append(torch.Tensor)
+        valid_types.append(torch.Tensor)
 
         return {k: v if type(v) in valid_types else str(v) for k, v in d.items()}
 
@@ -557,12 +484,3 @@ class TrainingArguments:
         The device used by this process.
         """
         return self._setup_devices
-
-
-class ParallelMode(Enum):
-    NOT_PARALLEL = "not_parallel"
-    NOT_DISTRIBUTED = "not_distributed"
-    DISTRIBUTED = "distributed"
-    SAGEMAKER_MODEL_PARALLEL = "sagemaker_model_parallel"
-    SAGEMAKER_DATA_PARALLEL = "sagemaker_data_parallel"
-    TPU = "tpu"
