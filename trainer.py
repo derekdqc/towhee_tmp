@@ -42,20 +42,12 @@ from trainer_callback import (
     TrainerControl,
     TrainerState,
 )
-from trainer_pt_utils import (
-    SequentialDistributedSampler,
-    nested_concat,
-    nested_detach,
-    reissue_pt_warnings,
-)
 from trainer_utils import (
     PREFIX_CHECKPOINT_DIR,
     EvalLoopOutput,
     EvalPrediction,
     PredictionOutput,
     TrainOutput,
-    denumpify_detensorize,
-    set_seed,
 )
 from training_args import TrainingArguments
 from utils import logging
@@ -451,7 +443,7 @@ class Trainer:
             torch.save(self.optimizer.state_dict(), os.path.join(output_dir, "optimizer.pt"))
             with warnings.catch_warnings(record=True) as caught_warnings:
                 torch.save(self.lr_scheduler.state_dict(), os.path.join(output_dir, "scheduler.pt"))
-            reissue_pt_warnings(caught_warnings)
+            # reissue_pt_warnings(caught_warnings)
 
         # Save the Trainer state
         if self.args.should_save:
@@ -464,11 +456,7 @@ class Trainer:
             "cpu": torch.random.get_rng_state(),
         }
         if torch.cuda.is_available():
-            if self.args.local_rank == -1:
-                # In non distributed, we save the global CUDA RNG state (will take care of DataParallel)
-                rng_states["cuda"] = torch.cuda.random.get_rng_state_all()
-            else:
-                rng_states["cuda"] = torch.cuda.random.get_rng_state()
+            rng_states["cuda"] = torch.cuda.random.get_rng_state()
 
     def log(self, logs: Dict[str, float]) -> None:
         """
