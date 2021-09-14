@@ -51,17 +51,9 @@ from trainer_utils import (
 )
 from training_args import TrainingArguments
 from utils import logging
-from utils.modeling_auto_mapping import MODEL_FOR_QUESTION_ANSWERING_MAPPING_NAMES
-
-_is_torch_generator_available = False
-_is_native_amp_available = False
 
 DEFAULT_CALLBACKS = [DefaultFlowCallback]
 DEFAULT_PROGRESS_CALLBACK = ProgressCallback
-
-if version.parse(torch.__version__) >= version.parse("1.6"):
-    _is_torch_generator_available = True
-    _is_native_amp_available = True
 
 logger = logging.get_logger(__name__)
 
@@ -186,9 +178,7 @@ class Trainer:
         # returned to 0 every time flos need to be logged
         self.current_flos = 0
         default_label_names = (
-            ["start_positions", "end_positions"]
-            if type(self.model).__name__ in MODEL_FOR_QUESTION_ANSWERING_MAPPING_NAMES.values()
-            else ["labels"]
+            ["labels"]
         )
         self.label_names = default_label_names if self.args.label_names is None else self.args.label_names
         self.control = self.callback_handler.on_init_end(self.args, self.state, self.control)
@@ -261,7 +251,7 @@ class Trainer:
             pin_memory=self.args.dataloader_pin_memory,
         )
 
-    def create_optimizer_and_scheduler(self, num_training_steps: int):
+    def create_optimizer_and_scheduler(self):
         """
         Setup the optimizer and the learning rate scheduler.
 
@@ -270,7 +260,7 @@ class Trainer:
         and/or :obj:`create_scheduler`) in a subclass.
         """
         self.create_optimizer()
-        self.create_scheduler(num_training_steps)
+        self.create_scheduler()
 
     def create_optimizer(self):
         """
@@ -281,7 +271,7 @@ class Trainer:
         """
         self.optimizer = optim.SGD(self.model.parameters(), lr=0.001, momentum=0.9)
 
-    def create_scheduler(self, num_training_steps: int):
+    def create_scheduler(self):
         """
         Setup the scheduler. The optimizer of the trainer must have been set up before this method is called.
 
@@ -331,7 +321,7 @@ class Trainer:
             # Setting a very large number of epochs so we go as many times as necessary over the iterator.
             num_train_epochs = sys.maxsize
 
-        self.create_optimizer_and_scheduler(num_training_steps=max_steps)
+        self.create_optimizer_and_scheduler()
 
         self.state = TrainerState()
 
