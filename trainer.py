@@ -153,6 +153,9 @@ class Trainer:
 
         self.train_dataset = train_dataset
         self.eval_dataset = eval_dataset
+
+        num_ftrs = model.fc.in_features
+        model.fc = nn.Linear(num_ftrs, 2)
         self.model = model
 
         self.optimizer, self.lr_scheduler = optimizers
@@ -211,6 +214,7 @@ class Trainer:
         return DataLoader(
             train_dataset,
             batch_size=self.args.train_batch_size,
+            shuffle=True
         )
 
     def get_eval_dataloader(self, eval_dataset: Optional[Dataset] = None) -> DataLoader:
@@ -231,6 +235,7 @@ class Trainer:
         return DataLoader(
             eval_dataset,
             batch_size=self.args.eval_batch_size,
+            shuffle=True
         )
 
     def get_test_dataloader(self, test_dataset: Dataset) -> DataLoader:
@@ -247,8 +252,7 @@ class Trainer:
         return DataLoader(
             test_dataset,
             batch_size=self.args.eval_batch_size,
-            drop_last=self.args.dataloader_drop_last,
-            pin_memory=self.args.dataloader_pin_memory,
+            shuffle=True
         )
 
     def create_optimizer_and_scheduler(self):
@@ -269,7 +273,7 @@ class Trainer:
         We provide a reasonable default that works well. If you want to use something else, you can pass a tuple in the
         Trainer's init through :obj:`optimizers`, or subclass and override this method in a subclass.
         """
-        self.optimizer = optim.SGD(self.model.parameters(), lr=0.001, momentum=0.9)
+        self.optimizer = optim.SGD(self.model.parameters(), lr=0.01, momentum=0.9)
 
     def create_scheduler(self):
         """
@@ -278,7 +282,7 @@ class Trainer:
         Args:
             num_training_steps (int): The number of training steps to do.
         """
-        self.lr_scheduler = optim.lr_scheduler.StepLR(self.optimizer, step_size=7, gamma=0.1)
+        self.lr_scheduler = optim.lr_scheduler.StepLR(self.optimizer, step_size=3, gamma=0.1)
 
     def num_examples(self, dataloader: DataLoader) -> int:
         """
@@ -352,9 +356,10 @@ class Trainer:
         self.state.num_train_epochs = num_train_epochs
 
         tr_loss = torch.tensor(0.0)
+        tr_corrects = 0
         # _total_loss_scalar is updated everytime .item() has to be called on tr_loss and stores the sum of all losses
         self._total_loss_scalar = 0.0
-        model.zero_grad()
+        # model.zero_grad()
 
         self.control = self.callback_handler.on_train_begin(args, self.state, self.control)
 
@@ -367,8 +372,9 @@ class Trainer:
             self.control = self.callback_handler.on_epoch_begin(args, self.state, self.control)
 
             for step, inputs in enumerate(epoch_iterator):
-                tr_loss += self.training_step(model, inputs)
-                self.current_flos += float(self.floating_point_ops(inputs))
+                loss, corrects = self.training_step(model, inputs)
+                tr_loss += loss
+                tr_corrects += corrects
 
                 # Optimizer step
                 optimizer_was_run = True
@@ -377,16 +383,16 @@ class Trainer:
                 if optimizer_was_run:
                     self.lr_scheduler.step()
 
-                model.zero_grad()
+                # model.zero_grad()
+                self.optimizer.zero_grad()
                 self.state.global_step += 1
                 self.state.epoch = epoch + (step + 1) / steps_in_epoch
                 self.control = self.callback_handler.on_step_end(args, self.state, self.control)
 
                 # self._maybe_log_save_evaluate(tr_loss)
 
-            self.control.should_save = True
             self.control = self.callback_handler.on_epoch_end(args, self.state, self.control)
-            self._maybe_log_save_evaluate(tr_loss)
+            self._maybe_log_save_evaluate(tr_loss, tr_corrects, num_examples)
 
             if self.control.should_training_stop:
                 break
@@ -401,20 +407,24 @@ class Trainer:
 
         return TrainOutput(self.state.global_step, train_loss)
 
-    def _maybe_log_save_evaluate(self, tr_loss):
+    def _maybe_log_save_evaluate(self, tr_loss, tr_corrects, num_examples):
         if self.control.should_log:
             logs: Dict[str, float] = {}
             tr_loss_scalar = tr_loss.item()
+            epoch_loss = tr_loss_scalar / num_examples
+            epoch_acc = tr_corrects / num_examples
+
             # reset tr_loss to zero
             tr_loss -= tr_loss
+            tr_corrects -= tr_corrects
 
-            # logs["loss"] = round(tr_loss_scalar / (self.state.global_step - self._globalstep_last_logged), 4)
-            logs["loss"] = tr_loss_scalar
+            logs["loss"] = epoch_loss
+            logs["accuracy"] = epoch_acc
 
             self._total_loss_scalar += tr_loss_scalar
             self.log(logs)
 
-        metrics = None
+        self.control.should_save = False
         if self.control.should_save:
             self._save_checkpoint()
             self.control = self.callback_handler.on_save(self.args, self.state, self.control)
@@ -431,7 +441,7 @@ class Trainer:
         # Save optimizer and scheduler
         if self.args.should_save:
             torch.save(self.optimizer.state_dict(), os.path.join(output_dir, "optimizer.pt"))
-            with warnings.catch_warnings(record=True) as caught_warnings:
+            with warnings.catch_warnings(record=True):
                 torch.save(self.lr_scheduler.state_dict(), os.path.join(output_dir, "scheduler.pt"))
             # reissue_pt_warnings(caught_warnings)
 
@@ -486,34 +496,33 @@ class Trainer:
         model.train()
         # inputs = self._prepare_inputs(inputs)
 
-        loss = self.compute_loss(model, inputs)
+        loss, corrects = self.compute_loss(model, inputs)
 
         if self.args.n_gpu > 1:
             loss = loss.mean()  # mean() to average on multi-gpu parallel training
 
         loss.backward()
 
-        return loss.detach()
+        return loss.detach(), corrects
 
     def compute_loss(self, model, inputs):
         """
-        How the loss is computed by Trainer. By default, all models return the loss in the first element.
+        How the loss is computed by PyTorchCNNTrainer. By default, all models return the loss in the first element.
 
         Subclass and override for custom behavior.
         """
         labels = inputs[1]
-        outputs = model(inputs[0])
+        with torch.set_grad_enabled(True):
+            outputs = model(inputs[0])
+            _, preds = torch.max(outputs, 1)
 
         if labels is not None:
-            # loss = self.label_smoother(outputs, labels)
             criterion = nn.CrossEntropyLoss()
             loss = criterion(outputs, labels)
-        else:
-            # We don't use .loss here since the model may return tuples instead of ModelOutput.
-            loss = outputs["loss"] if isinstance(outputs, dict) else outputs[0]
+            corrects = torch.sum(preds == labels.data)
 
         # return (loss, outputs) if return_outputs else loss
-        return loss
+        return loss, corrects
 
     def save_model(self, output_dir: Optional[str] = None):
         """
@@ -772,24 +781,6 @@ class Trainer:
             logits = logits[0]
 
         return (loss, logits, labels)
-
-    def floating_point_ops(self, inputs: Dict[str, Union[torch.Tensor, Any]]):
-        """
-        For models that inherit from :class:`~trainer.towhee.PreTrainedModel`, uses that method to compute the number of
-        floating point operations for every backward + forward pass. If using another model, either implement such a
-        method in the model or subclass and override this method.
-
-        Args:
-            inputs (:obj:`Dict[str, Union[torch.Tensor, Any]]`):
-                The inputs and targets of the model.
-
-        Returns:
-            :obj:`int`: The number of floating-point operations.
-        """
-        if hasattr(self.model, "floating_point_ops"):
-            return self.model.floating_point_ops(inputs)
-        else:
-            return 0
 
     def prediction_loop(
             self,
