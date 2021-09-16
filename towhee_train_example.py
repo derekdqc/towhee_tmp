@@ -5,6 +5,7 @@ import time
 import pandas as pd
 import torch
 import torchvision
+import torch.nn as nn
 from PIL import Image
 from pandas import Series
 from torch.utils.data import Dataset
@@ -74,6 +75,7 @@ class PytorchImageDataset(Dataset):
         for i in range(len(breed_list)):
             dic[breed_list[i]] = i
         self.labels = [dic[categories[i]] for i in range(len(categories))]
+        self.num_classes = len(breed_list)
 
     def __getitem__(self, index):
         label = self.labels[index]
@@ -92,12 +94,13 @@ train_data = PytorchImageDataset('./kaggle_dataset_small/train', './kaggle_datas
 eval_data = PytorchImageDataset('./kaggle_dataset_small/eval', './kaggle_dataset_small/eval/eval_labels.csv', data_transforms['val'])
 
 model = torchvision.models.resnet50(pretrained=True)
-
+num_ftrs = model.fc.in_features
+model.fc = nn.Linear(num_ftrs, train_data.num_classes)
 
 training_args = TrainingArguments(
     output_dir="./ResNet50",
     overwrite_output_dir=True,
-    num_train_epochs=500,
+    num_train_epochs=50,
     per_gpu_train_batch_size=4,
     prediction_loss_only=True,
 )
