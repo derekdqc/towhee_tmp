@@ -154,8 +154,6 @@ class Trainer:
         self.train_dataset = train_dataset
         self.eval_dataset = eval_dataset
 
-        num_ftrs = model.fc.in_features
-        model.fc = nn.Linear(num_ftrs, 2)
         self.model = model
 
         self.optimizer, self.lr_scheduler = optimizers
