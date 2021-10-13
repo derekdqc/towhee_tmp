@@ -14,7 +14,7 @@ from torch.utils.data import Dataset, DataLoader
 from torchvision import transforms, utils
 
 df = pd.read_csv('./kaggle_dataset/labels.csv')
-breed = df['breed']
+breed = df['category']
 breed_np = Series.to_numpy(breed)
 
 # 看一下一共多少不同种类
@@ -25,14 +25,14 @@ dic = {}
 for i in range(120):
     dic[breed_120_list[i]] = i
 
-file = Series.to_numpy(df["id"])
+file = Series.to_numpy(df["image_name"])
 
 file = [i + ".jpg" for i in file]
 file = [os.path.join("./kaggle_dataset/train", i) for i in file]
 file_train = file[:8000]
 file_val = file[8000:]
 
-breed = Series.to_numpy(df["breed"])
+breed = Series.to_numpy(df['category'])
 label = []
 for i in range(10222):
     label.append(dic[breed[i]])
@@ -168,7 +168,7 @@ def train_model(model, criterion, optimizer, scheduler, num_epochs=25):
     return model
 
 
-model_ft = torchvision.models.resnet18(pretrained=False)
+model_ft = torchvision.models.resnet50(pretrained=True)
 num_ftrs = model_ft.fc.in_features
 # Here the size of each output sample is set to 2.
 # Alternatively, it can be generalized to nn.Linear(num_ftrs, len(class_names)).
@@ -185,4 +185,4 @@ optimizer_ft = optim.SGD(model_ft.parameters(), lr=0.001, momentum=0.9)
 exp_lr_scheduler = lr_scheduler.StepLR(optimizer_ft, step_size=7, gamma=0.1)
 
 model_ft = train_model(model_ft, criterion, optimizer_ft, exp_lr_scheduler,
-                       num_epochs=25)
+                       num_epochs=500)

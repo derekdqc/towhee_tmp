@@ -46,7 +46,7 @@ class Operator:
         raise NotImplementedError
 
 
-class PytorchOperator(Operator, ABC):
+class PyTorchOperator(Operator, ABC):
     """
     The pytorch operator class
     """

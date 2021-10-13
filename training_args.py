@@ -398,7 +398,7 @@ class TrainingArguments:
                 "Using deprecated `--per_gpu_train_batch_size` argument which will be removed in a future "
                 "version. Using `--per_device_train_batch_size` is preferred."
             )
-        per_device_batch_size = self.per_gpu_train_batch_size or self.per_device_train_batch_size
+        per_device_batch_size = self.per_gpu_train_batch_size
         train_batch_size = per_device_batch_size * max(1, self.n_gpu)
         return train_batch_size
 
@@ -412,7 +412,7 @@ class TrainingArguments:
                 "Using deprecated `--per_gpu_eval_batch_size` argument which will be removed in a future "
                 "version. Using `--per_device_eval_batch_size` is preferred."
             )
-        per_device_batch_size = self.per_gpu_eval_batch_size or self.per_device_eval_batch_size
+        per_device_batch_size = self.per_gpu_eval_batch_size
         eval_batch_size = per_device_batch_size * max(1, self.n_gpu)
         return eval_batch_size
 
@@ -421,7 +421,7 @@ class TrainingArguments:
         if self.no_cuda:
             device = torch.device("cpu")
             self._n_gpu = 0
-        elif self.local_rank == -1:
+        else:
             # if n_gpu is > 1 we'll use nn.DataParallel.
             # If you only want to use a specific subset of GPUs use `CUDA_VISIBLE_DEVICES=0`
             # Explicitly set CUDA to the first (index 0) CUDA device, otherwise `set_device` will
@@ -452,18 +452,6 @@ class TrainingArguments:
         Serializes this instance to a JSON string.
         """
         return json.dumps(self.to_dict(), indent=2)
-
-    def to_sanitized_dict(self) -> Dict[str, Any]:
-        """
-        Sanitized serialization to use with TensorBoard’s hparams
-        """
-        d = self.to_dict()
-        d = {**d, **{"train_batch_size": self.train_batch_size, "eval_batch_size": self.eval_batch_size}}
-
-        valid_types = [bool, int, float, str]
-        valid_types.append(torch.Tensor)
-
-        return {k: v if type(v) in valid_types else str(v) for k, v in d.items()}
 
     @property
     def n_gpu(self):
