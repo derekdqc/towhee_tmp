@@ -21,7 +21,7 @@ model.eval()
 
 # test_image = '/Users/derek/Downloads/PennFudanPed/PNGImages/FudanPed00011.png'
 test_image = '/Users/derek/PycharmProjects/towhee/towhee/tests/dataset/kaggle_dataset_small/train' \
-             '/00214f311d5d2247d5dfe4fe24b2303d.jpg'
+             '/1cef8fb87d5ca2b8a833b5f9549634aa.jpg'
 img_pil = Image.open(test_image).convert('RGB')
 img_tensor = torchvision.transforms.ToTensor()(img_pil)
 images = [img_tensor.to(device)]

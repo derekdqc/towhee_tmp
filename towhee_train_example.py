@@ -114,3 +114,4 @@ trainer = Trainer(
 trainer.train()
 # trainer.evaluate()
 # trainer.predict()
+trainer.save_model()
